@@ -36,6 +36,7 @@ import {
   updatePlayerSocket,
   updatePlayerName,
   getActiveNotifyRoomId,
+  getActiveNotifyPlayerId,
 } from './rooms.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -88,16 +89,19 @@ const PORT = 3001;
 // 服务端通知 → 广播给对应房间的客户端（在 cardEngine.ts 中调用 showMessage 时触发）
 // category: 'hint'=提示 → server_notify / 'trigger'=触发效果 → server_trigger
 // 通过 rooms.ts 的"当前处理房间"上下文定向广播，避免跨房间串消息
+// P0-6：payload 携带"当前行动玩家 playerId"，客户端按 playerId 映射 self/opponent，
+// 不再依赖 isMyTurn 推断（多房间并发结算时归属才可靠）
 (globalThis as any).__card_notify_handler = (msg: string, target: string, category: string = 'hint') => {
   const event = category === 'trigger' ? 'server_trigger' : 'server_notify';
   const roomId = getActiveNotifyRoomId();
-  console.log('[Notify] 服务端发送', event + ':', msg, 'target:', target, 'room:', roomId ?? 'N/A');
+  const playerId = getActiveNotifyPlayerId();
+  console.log('[Notify] 服务端发送', event + ':', msg, 'target:', target, 'room:', roomId ?? 'N/A', 'player:', playerId ?? 'N/A');
   if (roomId) {
     // 定向广播：只发给当前处理房间内的玩家（已通过 socket.join 加入该 socket.io room）
-    io.to(roomId).emit(event, { text: msg, target });
+    io.to(roomId).emit(event, { text: msg, target, playerId });
   } else {
     // 兜底：无房间上下文时保持全局广播，避免漏消息（正常流程不会走到这里）
-    io.emit(event, { text: msg, target });
+    io.emit(event, { text: msg, target, playerId });
   }
 };
 console.log('[Notify] handler 已注册');
@@ -334,8 +338,8 @@ io.on('connection', (socket) => {
   });
 
   // ===== 红石粉：选择限时状态 =====
-  socket.on('redstone_choice', ({ buffIndex }: { buffIndex: number }, callback) => {
-    const result = handleRedstoneChoiceAction(socket.id, buffIndex);
+  socket.on('redstone_choice', ({ buffType, sourcePlayerId }: { buffType: string; sourcePlayerId?: string }, callback) => {
+    const result = handleRedstoneChoiceAction(socket.id, buffType, sourcePlayerId);
     if (result.success && result.gameState) {
       const roomInfo = getRoomBySocketId(socket.id);
       if (roomInfo) {

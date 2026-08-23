@@ -4,7 +4,7 @@ import {
   BUFF_NAMES, ContentSegment,
 } from './types';
 import { deepClone, applyEffectToPlayer, getBuffStacks, findBuff } from './buffEngine';
-import { CARDS, DEFAULT_HAND_LIMIT } from './constants';
+import { CARDS, DEFAULT_HAND_LIMIT, generateCardInstanceId, getCardSubtype, getLastNonGlassCard, MAX_LOG_ENTRIES } from './constants';
 import { handleDiscardBuffs, triggerDiscardEvents, triggerDrawEvents } from './gameEngine';
 
 // 服务端通知 handler（由 server/index.ts 设置，通过 globalThis 跨模块共享）
@@ -17,7 +17,34 @@ export function showMessage(msg: string, target: 'all' | 'self' | 'opponent' = '
 }
 
 // 触发效果收集器：在 applyCard 期间收集所有触发内容，用于末尾日志结构化
+// 嵌套 applyCard（玻璃板/魔咒爆发）通过保存/恢复机制隔离各自收集器，避免外层被重置
 let triggerCollector: ContentSegment[][] | null = null;
+
+// 卡牌结算递归深度护栏（玻璃板连锁复制上限），防止异常状态下无限递归
+let cardRecursionDepth = 0;
+const MAX_CARD_RECURSION_DEPTH = 6;
+
+/** 提取卡牌模板 id（card_N），兼容 _drawn_/_debug_/_brew_ 等实例前缀 */
+export function getTemplateCardId(cardId: string): string {
+  const m = cardId.match(/card_\d+/);
+  return m ? m[0] : cardId;
+}
+
+// 装备被动产生的 buff 的 sourceCardId → 卡牌模板 id（替换装备时据此移除旧装备产生的 buff）
+const EQUIP_PASSIVE_SOURCE_TO_TEMPLATE: Record<string, string> = {
+  golden_greaves: 'card_24',    // 金护腿：回血抵消凋零获得的护盾
+  hidden_screamer: 'card_42',   // 幽匿尖啸体（武器）：造成物理伤害时全场的凋零
+};
+
+/** 替换装备时移除旧装备产生的 buff（按 sourceCardId 归属，模板/实例 id 均匹配） */
+function removeEquipmentBuffs(holder: PlayerState, oldCard: CardDef) {
+  const tpl = getTemplateCardId(oldCard.id);
+  const sourceKeys = new Set<string>([oldCard.id, tpl]);
+  for (const [src, t] of Object.entries(EQUIP_PASSIVE_SOURCE_TO_TEMPLATE)) {
+    if (t === tpl) sourceKeys.add(src);
+  }
+  holder.buffs = holder.buffs.filter(b => !sourceKeys.has(b.sourceCardId || ''));
+}
 
 /** 发送结构化触发效果到客户端（打出效果提示面板） */
 export function showTrigger(segments: ContentSegment[], target: 'all' | 'self' | 'opponent' = 'all') {
@@ -26,17 +53,6 @@ export function showTrigger(segments: ContentSegment[], target: 'all' | 'self' |
 }
 
 /** 卡牌效果引擎 — 处理单张卡牌打出的完整流程*/
-
-/** 根据 icon 前缀判断卡牌属于回血类(icon3)还是攻击类(icon4)，替代旧行动卡限制 */
-export function getCardSubtype(card: CardDef): 'heal' | 'attack' | null {
-  const parts = card.icon.split(',').map(Number);
-  // 最后一个数字是 CostType，前面的数字是视觉 icon
-  for (let i = 0; i < parts.length - 1; i++) {
-    if (parts[i] === 3) return 'heal';
-    if (parts[i] === 4) return 'attack';
-  }
-  return null;
-}
 
 //将卡牌添加到手牌
 export function addCardToHand(player: PlayerState, card: CardDef, s?: GameState, target?: PlayerState) {
@@ -65,7 +81,17 @@ export function addCardToHand(player: PlayerState, card: CardDef, s?: GameState,
 export function drawCards(player: PlayerState, count: number, s?: GameState, target?: PlayerState): PlayerState {
   let p = deepClone(player);
 
+  // 牌组抽空时自动将弃牌堆洗回牌组（规则：牌组循环），
+  // 防止运输矿车等 splice 清空牌组后摸牌崩溃
+  if (p.deck.length === 0 && p.discardPile.length > 0) {
+    const reshuffled = shuffleDeck({ ...p, deck: [...p.discardPile], discardPile: [] });
+    p.deck = reshuffled.deck;
+    p.discardPile = reshuffled.discardPile;
+  }
+
   for (let i = 0; i < count; i++) {
+    // 牌组与弃牌堆均为空（对局初始化异常）时兜底停止摸牌
+    if (p.deck.length === 0) break;
     // 2. 随机选择一张牌（索引）
     const randomIndex = Math.floor(Math.random() * p.deck.length);
     const sourceCard = p.deck[randomIndex];
@@ -73,7 +99,7 @@ export function drawCards(player: PlayerState, count: number, s?: GameState, tar
     // 3. 复制这张牌到手牌，并赋予新的唯一 ID（防止 ID 冲突）
     const drawn: CardDef = {
       ...sourceCard,
-      id: `${sourceCard.id}_drawn_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      id: generateCardInstanceId(sourceCard.id, 'drawn'),
     };
 
     addCardToHand(p, drawn, s, target);
@@ -125,9 +151,9 @@ export function heal(source: PlayerState, target: PlayerState, number: number, o
     const consumed = Math.min(witherStacks, healAmt);
     if(consumed > 0) consumeInPlace(target, BuffType.Wither, consumed);
     healAmt -= consumed;
-    // 金护腿：抵消凋零获得护盾
+    // 金护腿：抵消凋零获得护盾（护盾归属装备持有者）
     if (target.equipment?.equip?.name === '金护腿') {
-      applyEffectToPlayer(target, BuffType.Shield, consumed, undefined, 'golden_greaves', source.id, opponent, state);
+      applyEffectToPlayer(target, BuffType.Shield, consumed, undefined, 'golden_greaves', target.id, opponent, state);
     }
     // 幽匿尖啸体：凋零被清空时，对方随机丢弃一张牌（触发完整丢弃事件）
     if (getBuffStacks(target, BuffType.Wither) === 0
@@ -254,13 +280,13 @@ export function damage(source: PlayerState, target: PlayerState, type: DamageTyp
         { type: 'card', cardId: source.equipment.weapon.id },
       ], 'all');
     }
-    //烈焰棒：标记触发条件
+    //烈焰棒：标记触发条件（仅卡牌打出的物理伤害满足“上一张牌造成物理伤害”前提）
     if (source.equipment?.weapon?.name === '烈焰棒') {
       source.causePhysicalDamage = true;
       showMessage('丢弃一张牌可造成2点火焰伤害', "self")
     }
-    //烈焰粉提示
-    if(!source.blazePowderUsedThisTurn && source.hand.filter(card => card.name === '烈焰粉').length > 0) {
+    //烈焰粉提示（同样只在卡牌物理伤害时置位）
+    if (!source.blazePowderUsedThisTurn && source.hand.filter(card => card.name === '烈焰粉').length > 0) {
       source.causePhysicalDamage = true;
       showMessage('打出烈焰粉可额外造成3点火焰伤害', "self");
     }
@@ -376,19 +402,21 @@ export function applyCard(
   const oldBuffsP = deepClone(p.buffs);
   const oldBuffsT = isSelfTarget ? deepClone(p.buffs) : deepClone(t.buffs);
 
-  // 启动触发效果收集器
-  triggerCollector = [];
+  // 递归深度护栏：玻璃板连锁复制超过上限时终止结算，防止无限递归
+  if (cardRecursionDepth >= MAX_CARD_RECURSION_DEPTH) {
+    return { gameState: state, logMessages: ['卡牌连锁结算过深，已终止'] };
+  }
+  cardRecursionDepth++;
 
-  // 【新增】建立一个映射表，方便在循环中找到对应的副本
-// 这样我们在遍历所有玩家造成伤害时，能修改到 p 或 t，而不是去改 state.players
-const playerClones = new Map<string, PlayerState>();
-playerClones.set(p.id, p);
-if (!isSelfTarget) {
-    playerClones.set(t.id, t);
-}
+  // 启动触发效果收集器
+  const prevTriggerCollector = triggerCollector;
+  triggerCollector = [];
 
   // 从手牌移除
   p = removeFromHand(p, card.id);
+  // removeFromHand 会返回新克隆，重新同步 t（自瞄时 t 必须与 p 保持同一引用，
+  // 否则后续 damage(p, t, ...) 会打到过期的旧克隆上）
+  if (isSelfTarget) t = p;
 
   // 更新消耗计数
   const subtype = getCardSubtype(card);
@@ -451,7 +479,12 @@ if (!isSelfTarget) {
     const target = isSelfTarget ? p : t;
     if (target.equipment[slotKey]) {
       const oldCard = target.equipment[slotKey]!;
-      handleDiscardBuffs(p); // 触发丢弃事件，处理相关buff
+      target.discardPile.push(oldCard);
+      // 装备替换规则第 3 条：旧卡产生的 buff 被移除
+      removeEquipmentBuffs(target, oldCard);
+      // 走完整丢弃链路（绑定诅咒/下界荒地/仙人掌摸牌/灾厄旗帜/海洋之心/烈焰棒等）
+      const holderOpp = target === p ? state.players[1 - playerIndex] : p;
+      triggerDiscardEvents(target, oldCard, state, holderOpp);
       msgs.push(`丢弃了${oldCard.name}`);
     }
     const modifiedCard = { ...card, sourcePlayerId: p.id }; // 记录装备来源玩家ID，供buff计算时参考
@@ -480,8 +513,9 @@ if (!isSelfTarget) {
 
     } else if (effect.buffType === BuffType.HealAll) {
       // 全体回血（无论目标选择，双方都回血）
-      heal (p, p, effect.value, isSelfTarget ? state.players[1 - playerIndex] : t, state);
-      heal (p, state.players[1 - state.currentTurnIndex], effect.value, p, state);
+      const healAllOpponent = isSelfTarget ? state.players[1 - playerIndex] : t;
+      heal(p, p, effect.value, healAllOpponent, state);
+      heal(p, healAllOpponent, effect.value, p, state);
       // msgs.push(`${cardName}为双方回复了${effect.value}点血量`);
     } else if (effect.buffType === BuffType.PhysicalDamage) {
       //物理伤害
@@ -638,12 +672,14 @@ if (!isSelfTarget) {
     } else if (effect.buffType === BuffType.DrawCard) {
       // 摸牌
       const target = isSelfTarget ? p : t;
-      const opponent = isSelfTarget ? t : p;
+      // 自瞄时 opponent 必须是“真实的对手”（state 中的另一玩家），
+      // 而非 t（自瞄时 t 与 p 同引用，会把爆牌目标算成自己——P0-10）
+      const opponent = isSelfTarget ? state.players[1 - playerIndex] : p;
       const oldHandLen = target.hand.length;
       const drawn = drawCards(target, effect.value, state, opponent);
       const newCards = drawn.hand.length - oldHandLen;
       msgs.push(`${cardName}使${targetLabel}摸了${Math.max(0, newCards)}张牌`);
-      if (isSelfTarget) p = drawn; else t = drawn;
+      if (isSelfTarget) { p = drawn; t = p; } else { t = drawn; }
 
     } else if (effect.buffType === BuffType.StealCard) {
       // 抽取目标一张手牌
@@ -666,7 +702,7 @@ if (!isSelfTarget) {
     } else if (effect.buffType === BuffType.RevealHand) {
       // 展示手牌：在日志中记录目标手牌信息
       const target = isSelfTarget ? p : t;
-      const count = Math.min(effect.value, target.hand.length);
+      const count = target.hand.length; // 望远镜：展示所有手牌
       const revealed = target.hand.slice(0, count).map(c => c.name).join('、');
       msgs.push(`揭示的手牌：${revealed}`);
       showTrigger([
@@ -717,30 +753,24 @@ if (!isSelfTarget) {
   }
 
   // ===== 特殊卡牌处理 =====
-// 仙人掌：对所有人造成物理伤害
-if (card.name === '仙人掌') {
-    // 1. 先对“自己”的副本造成伤害
-    // 注意：这里必须用 p（自己当前的副本），不能用 state.players
+  // 仙人掌：对所有人造成1点物理伤害（自己 + 对手各一次）
+  // 修复：自瞄时不能对 p 打两次，必须对“真实的对手”（state 中另一玩家）结算，
+  //       且其原地修改会在末尾写回并穿过玻璃板递归保留
+  if (card.name === '仙人掌') {
+    const opponentObj = isSelfTarget ? state.players[1 - playerIndex] : t;
     damage(p, p, DamageType.Physical, 1, true);
-    
-    // 2. 再对“对手”的副本造成伤害
-    // 如果目标是别人（isSelfTarget 为 false），t 就是对手的副本
-    // 如果目标是自己（isSelfTarget 为 true），t 其实就是 p（或者不需要单独处理）
-    if (!isSelfTarget) {
-        damage(p, t, DamageType.Physical, 1, true);
-    } else {
-        // 如果目标是自己，其实上面第一步已经打过了（因为 p 就是目标）。
-        // 但为了逻辑严谨（模拟“对所有人”），我们依然调用一次 damage。
-        // 此时 t 就是 p，但为了保险，我们还是传入 p 作为受害者。
-        damage(p, p, DamageType.Physical, 1, true); // 或者 damage(p, t, ...) 此时 t===p
-    }
-    
+    damage(p, opponentObj, DamageType.Physical, 1, true);
     msgs.push(`${cardName}对所有玩家造成了1点物理伤害`);
-}
+  }
 
-  // 蜘蛛网：设置待选封锁类型
+  // 蜘蛛网：设置待选封锁类型（目标装备海龟壳时免疫蜘蛛网）
   if (card.name === '蜘蛛网') {
-    p.pendingBucketChoice = 'pending';
+    const bucketTarget = isSelfTarget ? p : t;
+    if (bucketTarget.equipment?.equip?.name === '海龟壳') {
+      showMessage(`海龟壳免疫蜘蛛网，${bucketTarget.name}未被封锁`, 'all');
+    } else {
+      p.pendingBucketChoice = 'pending';
+    }
   }
 
   // 诡异钓竿：设置待选装备
@@ -755,31 +785,36 @@ if (card.name === '仙人掌') {
 
   // 玻璃板：复制上一张牌的效果
   if (card.name === '玻璃板') {
-    // 保存当前的 lastPlayedCardDef / lastPlayedCardSelfTarget（玻璃板在 L340 被排除，未 push）
+    // 保存当前的 lastPlayedCardDef / lastPlayedCardSelfTarget（玻璃板不参与 push）
     const beforePlayedDef = [...(p.lastPlayedCardDef || [])];
     const beforeSelfTarget = [...(p.lastPlayedCardSelfTarget || [])];
 
-    // 找最后一张非玻璃板的牌（避免连续玻璃板无限递归）
-    let lastCard: CardDef | null = null;
-    for (let i = p.lastPlayedCardDef.length - 1; i >= 0; i--) {
-      if (p.lastPlayedCardDef[i].name !== '玻璃板') {
-        lastCard = p.lastPlayedCardDef[i];
-        break;
-      }
-    }
+    // 找最后一张非玻璃板的牌（避免连续玻璃板无限递归；与校验层共用同一查找逻辑）
+    const lastCard = getLastNonGlassCard(p);
 
     if (lastCard) {
       // 1. 保存当前的消耗次数（此时已经包含了玻璃板作为锦囊牌自身消耗的 1 次）
       const beforeActionCount = p.actionStrategyCountThisTurn || 0;
 
-      const newState = deepClone(gameState);
+      // 关键修复（P0-1/P0-5/P0-10）：
+      // a) 递归必须基于“当前已结算的 state”克隆，而不是最初的 gameState 参数，
+      //    否则自瞄 HealAll / 幽匿尖啸体弃牌 / 盾牌摸牌等对对手的原地修改会在递归中丢失；
+      // b) 只覆盖使用者/目标槽位，绝不再用 t（自瞄时 t===p）去覆盖对手槽位；
+      // c) 内层完整日志并入外层 state.log，被复制牌的结算记录不再凭空消失。
+      const newState = deepClone(state);
       newState.players[playerIndex] = p;
-      newState.players[1 - playerIndex] = t;
+      if (!isSelfTarget) newState.players[targetIndex] = t;
       const result = applyCard(newState, playerId, targetId, lastCard);
       const pIdx = result.gameState.players.findIndex(pl => pl.id === playerId);
       p = result.gameState.players[pIdx];
       t = result.gameState.players[1 - pIdx];
-      
+      if (isSelfTarget) {
+        // 自瞄时对手槽位未写入，把内层结算后的对手副本合并回来（含原地修改）
+        state.players[1 - playerIndex] = result.gameState.players[1 - pIdx];
+        t = p; // 恢复自瞄别名不变式
+      }
+      state.log = result.gameState.log;
+
       // 2. 撤销内部 applyCard 造成的消耗次数变化，恢复到只有玻璃板自身 1 次消耗的状态
       p.actionStrategyCountThisTurn = beforeActionCount;
       // 撤销内部 applyCard 对 lastPlayedCardDef/SelfTarget 的 push，改为 push 玻璃板本体
@@ -793,14 +828,15 @@ if (card.name === '仙人掌') {
         { type: 'card', cardId: lastCard.id },
       ], 'all');
       result.logMessages.forEach(msg => msgs.push(msg));
-      
-      // 3. 手动追加消耗：无论复制什么类型，玻璃板总共消耗 3 次
-      // beforeActionCount 已经包含了玻璃板的 1 次，再 +2 即代表总共消耗 3 次
-      if (lastCard.costType === CostType.Action) {    
-        p.actionStrategyCountThisTurn = beforeActionCount + 2;     
-        msgs[msgs.length - 1] += '（总共消耗3次行动/锦囊次数）';    
-        }
-   
+
+      // 3. 手动追加消耗：复制行动牌时需额外消耗 2 次（含玻璃板自身 1 次共 3 次），
+      //    复制其它类型只消耗玻璃板自身 1 次（锦囊/装备等），与校验层保持一致
+      if (lastCard.costType === CostType.Action) {
+        p.actionStrategyCountThisTurn = beforeActionCount + 2;
+        msgs[msgs.length - 1] += '（复制行动牌，总共消耗3次行动/锦囊次数）';
+      } else {
+        p.actionStrategyCountThisTurn = beforeActionCount;
+      }
     } else {
       msgs.push('玻璃板没有可复制的牌');
     }
@@ -843,10 +879,11 @@ if (card.name === '仙人掌') {
   // 烈焰粉：上一张牌造成物理伤害后打出额外造成火焰伤害（每回合限1次）
   // 自瞄时忽略条件（不需要物理伤害前置、不受回合限次），且不影响两个标记
   if (card.name === '烈焰粉') {
+    const blazeTarget = isSelfTarget ? p : t;
     if (isSelfTarget) {
-      damage(p, t, DamageType.Fire, 3, true);
+      damage(p, blazeTarget, DamageType.Fire, 3, true);
     } else if (p.causePhysicalDamage && !p.blazePowderUsedThisTurn) {
-      damage(p, t, DamageType.Fire, 3, true);
+      damage(p, blazeTarget, DamageType.Fire, 3, true);
       p.causePhysicalDamage = false;
       p.blazePowderUsedThisTurn = true;
     }
@@ -854,7 +891,7 @@ if (card.name === '仙人掌') {
 
   // 重生锚：造成2点火焰伤害
   if (card.name === '重生锚') {
-    damage(p, t, DamageType.Fire, 2, true);
+    damage(p, isSelfTarget ? p : t, DamageType.Fire, 2, true);
   }
 
   // 红石粉：设置待选限时状态（弹窗选择，参考诡异钓竿模式）
@@ -894,9 +931,9 @@ if (card.name === '仙人掌') {
   if (!isSelfTarget && newHpT !== oldHpT) hpParts.push(`对方血量${oldHpT}→${newHpT}`);
   const hpSuffix = hpParts.length > 0 ? `，${hpParts.join('，')}` : '';
 
-  // 收集触发效果（停止收集器）
+  // 收集触发效果（注意：收集器在 buff 变化提示推送【之后】才恢复，
+  // 否则嵌套 applyCard 的 buff 变化行会泄漏进外层收集器，造成日志重复）
   const triggerLines = triggerCollector || [];
-  triggerCollector = null;
 
   // 计算 buff 变化（获得/失去），合并到同一行
   const targetLabel = isSelfTarget ? '自己' : '对方';
@@ -948,6 +985,9 @@ if (card.name === '仙人掌') {
     showTrigger(line, 'all');
   }
 
+  // 停止收集器（必须在 buff 变化推送之后，见上方注释）
+  triggerCollector = prevTriggerCollector;
+
   // 组装结构化日志内容
   const logSegments: ContentSegment[][] = [
     [{ type: 'text', text: `对${targetLabel}打出了`, bold: true }, { type: 'card', cardId: card.id }],
@@ -967,5 +1007,11 @@ if (card.name === '仙人掌') {
   };
   state.log.push(entry);
 
+  // 日志上限：防止长对局内存与前端渲染无限膨胀（配合 P0-2 的无限增长数组清理）
+  if (state.log.length > MAX_LOG_ENTRIES) {
+    state.log.splice(0, state.log.length - MAX_LOG_ENTRIES);
+  }
+
+  cardRecursionDepth--;
   return { gameState: state, logMessages: msgs };
 }

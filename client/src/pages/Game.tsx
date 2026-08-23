@@ -318,11 +318,11 @@ useEffect(() => {
     setPending(false);
   }, [cancelEquipChoice]);
 
-  // 红石粉：选择限时状态（按弹窗列表顺序的索引）
-  const handleRedstoneSelect = useCallback(async (buffIndex: number) => {
+  // 红石粉：选择限时状态（P1：按 buffType + sourcePlayerId 定位，不再传数组下标）
+  const handleRedstoneSelect = useCallback(async (buffType: string, sourcePlayerId?: string) => {
     setShowRedstoneDialog(false);
     setPending(true);
-    await redstoneChoice(buffIndex);
+    await redstoneChoice(buffType, sourcePlayerId || '');
     setPending(false);
   }, [redstoneChoice]);
 
@@ -814,7 +814,7 @@ useEffect(() => {
                   return <p className="text-sm text-text-secondary text-center py-4">目标没有限时状态</p>;
                 }
                 return timedBuffs.map((buff, idx) => (
-                  <button key={idx} onClick={() => handleRedstoneSelect(idx)}
+                  <button key={`${buff.buffType}-${buff.sourcePlayerId}-${idx}`} onClick={() => handleRedstoneSelect(buff.buffType, buff.sourcePlayerId)}
                     className="w-full flex items-center gap-3 p-3 rounded-xl border border-card-border hover:border-accent-equip/40 transition-colors hover:bg-card-bg/50 text-left"
                   >
                     <img src={`/assets/buff/buff${BUFF_ICON_MAP[buff.buffType as string]}.png`} alt="" className="w-8 h-8 object-contain" style={{ imageRendering: 'pixelated' }} />

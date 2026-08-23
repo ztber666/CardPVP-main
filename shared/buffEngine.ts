@@ -1,5 +1,4 @@
-import { displayMessage } from '../client/src/store/notificationStore';
-import {  damage, DamageType, heal, showTrigger } from './cardEngine';
+import { damage, DamageType, heal, showTrigger } from './cardEngine';
 import { PlayerState, ActiveBuff, BuffType, GameState, ContentSegment } from './types';
 
 /**
@@ -9,10 +8,14 @@ import { PlayerState, ActiveBuff, BuffType, GameState, ContentSegment } from './
 // ===== 工具函数 =====
 
 export function deepClonePlayer(p: PlayerState): PlayerState {
-  return JSON.parse(JSON.stringify(p));
+  return deepClone(p);
 }
 
 export function deepClone<T>(obj: T): T {
+  // structuredClone 比 JSON.parse(JSON.stringify()) 快一个量级；GameState 只含纯数据，可安全克隆
+  if (typeof structuredClone === 'function') {
+    return structuredClone(obj);
+  }
   return JSON.parse(JSON.stringify(obj));
 }
 
@@ -58,8 +61,14 @@ export function applyEffectToPlayer(
     ], 'all');
     return;
   }
-  // 同类型且剩余回合数相同 → 合并层数
-  const existing = player.buffs.find(b => b.buffType === buffType && b.remainingTurns === duration);
+  // 同类型、同剩余回合、同来源 → 合并层数（P0-7：必须匹配 sourcePlayerId，
+  // 否则不同来源的 buff 会被合并成一个、归属第一个来源，导致 processTurnEndBuffs
+  // 按来源减时出现提前/延迟消失）
+  const existing = player.buffs.find(b =>
+    b.buffType === buffType &&
+    b.remainingTurns === duration &&
+    b.sourcePlayerId === sourcePlayerId
+  );
   if (existing) {
     existing.stacks += stacks;
     existing.value = Math.max(existing.value, value);
@@ -106,7 +115,8 @@ export function processTurnStartBuffs(player: PlayerState, opponent: PlayerState
   }
   const selfHorde = getBuffStacks(p, BuffType.Horde, p.id);
   if(selfHorde > 0) {
-    const dealt = damage(p, p, DamageType.Physical, selfHorde, true);
+    // 尸潮是 buff 结算，不是“打出的卡牌”，isCard=false —— 不满足烈焰粉/烈焰棒的“卡牌物理伤害”前提
+    const dealt = damage(p, p, DamageType.Physical, selfHorde, false);
     showTrigger([{ type: 'buff', buffType: BuffType.Horde }], 'all');
     logSettlementEvent(state, `尸潮：${p.name}受到${dealt}点物理伤害`, [
       { type: 'buff', buffType: BuffType.Horde },
@@ -135,7 +145,8 @@ export function processTurnStartBuffs(player: PlayerState, opponent: PlayerState
   }
   const outHorde = getBuffStacks(opponent, BuffType.Horde, p.id);
   if(outHorde > 0) {
-    const dealt = damage(p, opponent, DamageType.Physical, outHorde, true);
+    // 同 selfHorde：尸潮是 buff 结算而非卡牌伤害，isCard=false
+    const dealt = damage(p, opponent, DamageType.Physical, outHorde, false);
     showTrigger([{ type: 'buff', buffType: BuffType.Horde }], 'all');
     logSettlementEvent(state, `尸潮：${opponent.name}受到${dealt}点物理伤害`, [
       { type: 'buff', buffType: BuffType.Horde },

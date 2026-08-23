@@ -1,11 +1,23 @@
-import { CostType, BuffType, EffectDef, CardDef, ActiveBuff } from './types';
+import { CostType, BuffType, EffectDef, CardDef, ActiveBuff, PlayerState } from './types';
 
 // ===== 游戏常量 =====
 export const DEFAULT_MAX_HP = 20;
 export const DEFAULT_HAND_LIMIT = 10;
 export const INITIAL_DRAW_COUNT = 3;
 export const TURN_DRAW_COUNT = 3;
-export const MAX_STRATEGY_PER_TURN = 3;
+
+// 战斗日志上限（防止长对局内存与前端渲染无限膨胀）
+export const MAX_LOG_ENTRIES = 200;
+
+// ===== 卡牌实例 ID 生成 =====
+// 使用 crypto.randomUUID 降低碰撞概率并去掉 Date.now() 依赖；客户端仍通过 card_(\d+) 解析资源编号
+export function generateCardInstanceId(templateId: string, prefix: string = 'drawn'): string {
+  const randomPart =
+    ((globalThis as any).crypto?.randomUUID?.() as string | undefined)?.replace(/-/g, '').slice(0, 8) ??
+    Math.random().toString(36).slice(2, 10);
+  return `${prefix}_${templateId}_${randomPart}`;
+}
+
 
 // ===== 卡牌类型图标映射 (icon列的最后一位数字 → CostType) =====
 const TYPE_MAP: Record<number, CostType> = {
@@ -34,14 +46,37 @@ export function parseIcon(iconStr: string): CostType[] {
 }
 
 // 便捷创建 EffectDef
-function eff(buffType: BuffType, value: number, duration?: number): EffectDef {
+export function eff(buffType: BuffType, value: number, duration?: number): EffectDef {
   return { buffType, value, duration, target: 'self' };
 }
 
 // 便捷创建 ActiveBuff
-function activeBuff(buffType: BuffType, stacks: number, remainingTurns?: number): ActiveBuff {
+export function activeBuff(buffType: BuffType, stacks: number, remainingTurns?: number): ActiveBuff {
   const value = stacks;
   return { buffType, value, stacks, remainingTurns, sourceCardId: '', sourcePlayerId: '' };
+}
+
+/**
+ * 根据 icon 前缀判断卡牌属于回血类(icon3)还是攻击类(icon4)。
+ * 与解析类逻辑放在 constants（纯数据层），避免 validation/cardEngine 互相 import。
+ */
+export function getCardSubtype(card: CardDef): 'heal' | 'attack' | null {
+  const parts = card.icon.split(',').map(Number);
+  // 最后一个数字是 CostType，前面的数字是效果类型
+  for (let i = 0; i < parts.length - 1; i++) {
+    if (parts[i] === 3) return 'heal';
+    if (parts[i] === 4) return 'attack';
+  }
+  return null;
+}
+
+/** 本回合上一张“非玻璃板”打出的牌（玻璃板的复制目标）。校验与结算共用，避免两套逻辑漂移。 */
+export function getLastNonGlassCard(player: PlayerState): CardDef | null {
+  const defs = player.lastPlayedCardDef || [];
+  for (let i = defs.length - 1; i >= 0; i--) {
+    if (defs[i].name !== '玻璃板') return defs[i];
+  }
+  return null;
 }
 
 // ===== 卡牌定义 =====
@@ -245,16 +280,16 @@ export const CARDS: CardTemplate[] = [
     id: 'card_19', name: '蛋糕', icon: '3,1', weight: 4, defaultTarget: 'self',
     costType: CostType.Action,
     effects: [
-      eff(BuffType.HealAll, 1),
-      eff(BuffType.HealAll, 1),
-      eff(BuffType.Heal, 2)
+      eff(BuffType.IncreaseMaxHp, 2),
+      eff(BuffType.HealAll, 3),
+      eff(BuffType.Heal, 2),
     ],
     buffs: [
-      activeBuff(BuffType.HealAll, 1),
-      activeBuff(BuffType.HealAll, 1),
-      activeBuff(BuffType.Heal, 2)
+      activeBuff(BuffType.IncreaseMaxHp, 2),
+      activeBuff(BuffType.HealAll, 3),
+      activeBuff(BuffType.Heal, 2),
     ],
-    description: '所有人回2次1点血 / 我方额外回1次2点血',
+    description: '目标血量上限+2 / 所有人回3点血 / 目标回2点血',
   },
   {
     id: 'card_20', name: '潜影盒', icon: '7,2', weight: 3, defaultTarget: 'self',
@@ -313,7 +348,7 @@ export const CARDS: CardTemplate[] = [
     costType: CostType.Equip,
     effects: [eff(BuffType.FireResist, 1, 1)],
     buffs: [activeBuff(BuffType.FireResist, 1, 1)],
-    description: '免疫蜘蛛网 / 抗火[*1]',
+    description: '免疫蜘蛛网 / 抗火[*1] / 结束出牌时移除1点凋零',
   },
   {
     id: 'card_27', name: '三叉戟', icon: '9', weight: 1, defaultTarget: 'self',

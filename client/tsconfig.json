@@ -2,7 +2,6 @@
   "extends": "../tsconfig.json",
   "compilerOptions": {
       "rootDir": "..",
-      "ignoreDeprecations": "6.0",
     "jsx": "react-jsx",
     "outDir": "./dist",
     "paths": {
