@@ -1,5 +1,5 @@
-import { GameState, PlayerState, GamePhase, CostType, BuffType, PlayCardAction } from './types';
-import { getCardSubtype } from './cardEngine';
+import { GameState, GamePhase, CostType, BuffType, PlayCardAction } from './types';
+import { getCardSubtype, getLastNonGlassCard } from './constants';
 
 /**
  * 动作合法性校验
@@ -44,27 +44,19 @@ export function validatePlayCard(
   const player = currentPlayer; // 方便后续使用
   const isSelfTarget = action.targetId === player.id;
   //烈焰粉：不满足条件无法打出（自瞄时忽略条件）
-  if (card.name === '烈焰粉' && !isSelfTarget && !player.causePhysicalDamage) {
+  if (card.name === '烈焰粉' && !isSelfTarget && !player.causePhysicalDamageFen) {
     return { valid: false, error: '上一张未造成物理伤害，无法打出烈焰粉' };
   }
 
-   /* ===== 附魔台原打出条件（已暂时禁用，保留备用） =====
-  //附魔台：不满足条件无法打出
-  if (card.name === '附魔台') {
-    const checkTypes = [CostType.Heal, CostType.Attack, CostType.Buff, CostType.Debuff, CostType.Event];
-    const played = player.playedCardTypesThisTurn || [];
-    const matchedTypes = checkTypes.filter(ct => played.includes(ct));
-    if (matchedTypes.length < 4) {
-      return { valid: false, error: '本回合未打出4种类型牌，无法打出附魔台' };
-    }
-  }*/
-
-  //玻璃板：无论复制什么类型，都需要剩余至少3次行动/锦囊次数
+  //玻璃板：消耗与结算层保持一致（P0-9）——
+  // 复制“行动牌”需额外消耗 2 次（含玻璃板自身共 3 次）；复制其它类型只消耗 1 次。
   if (card.name === '玻璃板') {
     const poolLimit = 5 + (player.actionLimitBonus || 0);
     const remaining = poolLimit - (player.actionStrategyCountThisTurn || 0);
-    if (remaining < 3) {
-      return { valid: false, error: `打出玻璃板需要剩余至少3次行动/锦囊次数（当前剩余${remaining}次）` };
+    const lastCard = getLastNonGlassCard(player);
+    const need = lastCard?.costType === CostType.Action ? 3 : 1;
+    if (remaining < need) {
+      return { valid: false, error: `打出玻璃板需要剩余至少${need}次行动/锦囊次数（当前剩余${remaining}次）` };
     }
   }
 
@@ -84,7 +76,7 @@ export function validatePlayCard(
       return { valid: false, error: `本回合行动/锦囊牌已达上限(${poolLimit}张)` };
     }
   }
-  // 回血类/攻击类：各1张/回合（额外限制）
+  // 回血类/攻击类：各1张/回合（额外限制；冰原场地使两类次数互通）
   if (subtype === 'heal' && (currentPlayer.healCountThisTurn || 0) >= 1) {
     if (player.equipment?.field?.name === '冰原' && (player.attackCountThisTurn || 0) < 1) {
       return { valid: true }; // 冰原场地加成：回血类和攻击类消耗次数互通

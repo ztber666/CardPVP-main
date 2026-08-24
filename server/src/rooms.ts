@@ -8,7 +8,7 @@ import {
 } from '../../shared/gameEngine';
 import { validatePlayCard, validateEndTurn } from '../../shared/validation';
 import { deepClone } from '../../shared/buffEngine';
-import { CARDS } from '../../shared/constants';
+import { CARDS, generateCardInstanceId } from '../../shared/constants';
 import { addCardToHand } from '../../shared/cardEngine';
 
 /**
@@ -38,19 +38,29 @@ export const socketToRoom = new Map<string, { roomId: string; playerId: string }
 // 在调用引擎前后记录/清除"当前处理房间"，服务端就能把通知定向广播到该房间，
 // 避免 io.emit 全局广播导致跨房间串消息。
 let activeNotifyRoomId: string | null = null;
+// P0-6：同时记录“当前行动玩家”，使 target:'self'/'opponent' 能按 playerId 精确归属，
+// 而非依赖客户端 isMyTurn 推断（多房间并发结算时语义才可靠）
+let activeNotifyPlayerId: string | null = null;
 
 export function getActiveNotifyRoomId(): string | null {
   return activeNotifyRoomId;
 }
 
-/** 在同步引擎调用期间设置/清除通知房间上下文（支持嵌套） */
-export function withNotifyRoom<T>(roomId: string, fn: () => T): T {
-  const prev = activeNotifyRoomId;
+export function getActiveNotifyPlayerId(): string | null {
+  return activeNotifyPlayerId;
+}
+
+/** 在同步引擎调用期间设置/清除通知房间+行动玩家上下文（支持嵌套） */
+export function withNotifyRoom<T>(roomId: string, playerId: string | null, fn: () => T): T {
+  const prevRoom = activeNotifyRoomId;
+  const prevPlayer = activeNotifyPlayerId;
   activeNotifyRoomId = roomId;
+  activeNotifyPlayerId = playerId;
   try {
     return fn();
   } finally {
-    activeNotifyRoomId = prev;
+    activeNotifyRoomId = prevRoom;
+    activeNotifyPlayerId = prevPlayer;
   }
 }
 
@@ -110,7 +120,7 @@ export function joinRoom(socketId: string, roomId: string, playerName: string, v
       room.players[0].id, room.players[0].name,
       room.players[1].id, room.players[1].name
     );
-    room.gameState = withNotifyRoom(roomId, () => initGame(gameState));
+    room.gameState = withNotifyRoom(roomId, playerId, () => initGame(gameState));
   }
 
   return { success: true, playerId };
@@ -186,7 +196,11 @@ function generateRoomCode(): string {
 }
 
 function generatePlayerId(): string {
-  return `player_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  // 确定性 ID（randomUUID），避免 Date.now + Math.random 的碰撞/非确定问题
+  const randomPart =
+    ((globalThis as any).crypto?.randomUUID?.() as string | undefined)?.replace(/-/g, '').slice(0, 8) ??
+    Math.random().toString(36).substring(2, 10);
+  return `player_${randomPart}`;
 }
 
 // ===== 处理出牌 =====
@@ -206,7 +220,7 @@ export function handlePlayCard(
     return { success: false, error: validation.error };
   }
 
-  const result = withNotifyRoom(roomInfo.roomId, () => playCard(room.gameState!, { cardId, targetId }, roomInfo.playerId));
+  const result = withNotifyRoom(roomInfo.roomId, roomInfo.playerId, () => playCard(room.gameState!, { cardId, targetId }, roomInfo.playerId));
 
   if (result.success) {
     room.gameState = result.gameState;
@@ -232,9 +246,9 @@ export function handleEndTurn(socketId: string): { success: boolean; gameState?:
     return { success: false, error: validation.error };
   }
 
-  room.gameState = withNotifyRoom(roomInfo.roomId, () => endTurn(room.gameState!));
+  room.gameState = withNotifyRoom(roomInfo.roomId, roomInfo.playerId, () => endTurn(room.gameState!));
   if (room.gameState.phase !== GamePhase.GameOver) {
-    room.gameState = withNotifyRoom(roomInfo.roomId, () => startTurn(room.gameState!));
+    room.gameState = withNotifyRoom(roomInfo.roomId, roomInfo.playerId, () => startTurn(room.gameState!));
   }
 
   return { success: true, gameState: room.gameState };
@@ -248,7 +262,7 @@ export function handleDiscardCard(socketId: string, cardId: string, targetId?: s
   const room = rooms.get(roomInfo.roomId);
   if (!room || !room.gameState) return { success: false, error: '房间或游戏状态不存在' };
 
-  room.gameState = withNotifyRoom(roomInfo.roomId, () => discardFromHand(room.gameState!, roomInfo.playerId, cardId, targetId));
+  room.gameState = withNotifyRoom(roomInfo.roomId, roomInfo.playerId, () => discardFromHand(room.gameState!, roomInfo.playerId, cardId, targetId));
   return { success: true, gameState: room.gameState };
 }
 
@@ -260,7 +274,7 @@ export function handleUnequipCard(socketId: string, slot: string): { success: bo
   const room = rooms.get(roomInfo.roomId);
   if (!room || !room.gameState) return { success: false, error: '房间或游戏状态不存在' };
 
-  room.gameState = withNotifyRoom(roomInfo.roomId, () => unequipCard(room.gameState!, roomInfo.playerId, slot));
+  room.gameState = withNotifyRoom(roomInfo.roomId, roomInfo.playerId, () => unequipCard(room.gameState!, roomInfo.playerId, slot));
   return { success: true, gameState: room.gameState };
 }
 
@@ -279,7 +293,7 @@ export function handleGuessWeightAction(socketId: string, guess: number): { succ
   if (!roomInfo) return { success: false, error: '未找到房间' };
   const room = rooms.get(roomInfo.roomId);
   if (!room || !room.gameState) return { success: false, error: '房间或游戏状态不存在' };
-  room.gameState = withNotifyRoom(roomInfo.roomId, () => handleGuessWeight(room.gameState!, roomInfo.playerId, guess));
+  room.gameState = withNotifyRoom(roomInfo.roomId, roomInfo.playerId, () => handleGuessWeight(room.gameState!, roomInfo.playerId, guess));
   return { success: true, gameState: room.gameState };
 }
 
@@ -289,7 +303,7 @@ export function handleDraftPickAction(socketId: string, cardIndex: number): { su
   if (!roomInfo) return { success: false, error: '未找到房间' };
   const room = rooms.get(roomInfo.roomId);
   if (!room || !room.gameState) return { success: false, error: '房间或游戏状态不存在' };
-  room.gameState = withNotifyRoom(roomInfo.roomId, () => handleDraftPick(room.gameState!, roomInfo.playerId, cardIndex));
+  room.gameState = withNotifyRoom(roomInfo.roomId, roomInfo.playerId, () => handleDraftPick(room.gameState!, roomInfo.playerId, cardIndex));
   return { success: true, gameState: room.gameState };
 }
 
@@ -299,17 +313,18 @@ export function handleBucketChoiceAction(socketId: string, lockType: string): { 
   if (!roomInfo) return { success: false, error: '未找到房间' };
   const room = rooms.get(roomInfo.roomId);
   if (!room || !room.gameState) return { success: false, error: '房间或游戏状态不存在' };
-  room.gameState = withNotifyRoom(roomInfo.roomId, () => handleBucketChoice(room.gameState!, roomInfo.playerId, lockType));
+  room.gameState = withNotifyRoom(roomInfo.roomId, roomInfo.playerId, () => handleBucketChoice(room.gameState!, roomInfo.playerId, lockType));
   return { success: true, gameState: room.gameState };
 }
 
 // ===== 红石粉 =====
-export function handleRedstoneChoiceAction(socketId: string, buffIndex: number): { success: boolean; gameState?: GameState; error?: string } {
+// P1：改用 buffType + sourcePlayerId 定位目标 buff（不再依赖客户端数组下标）
+export function handleRedstoneChoiceAction(socketId: string, buffType: string, sourcePlayerId?: string): { success: boolean; gameState?: GameState; error?: string } {
   const roomInfo = getRoomBySocketId(socketId);
   if (!roomInfo) return { success: false, error: '未找到房间' };
   const room = rooms.get(roomInfo.roomId);
   if (!room || !room.gameState) return { success: false, error: '房间或游戏状态不存在' };
-  room.gameState = withNotifyRoom(roomInfo.roomId, () => handleRedstoneChoice(room.gameState!, roomInfo.playerId, buffIndex));
+  room.gameState = withNotifyRoom(roomInfo.roomId, roomInfo.playerId, () => handleRedstoneChoice(room.gameState!, roomInfo.playerId, buffType as any, sourcePlayerId));
   return { success: true, gameState: room.gameState };
 }
 
@@ -319,7 +334,7 @@ export function handleEquipChoiceAction(socketId: string, slot: string): { succe
   if (!roomInfo) return { success: false, error: '未找到房间' };
   const room = rooms.get(roomInfo.roomId);
   if (!room || !room.gameState) return { success: false, error: '房间或游戏状态不存在' };
-  room.gameState = withNotifyRoom(roomInfo.roomId, () => handleEquipChoice(room.gameState!, roomInfo.playerId, slot));
+  room.gameState = withNotifyRoom(roomInfo.roomId, roomInfo.playerId, () => handleEquipChoice(room.gameState!, roomInfo.playerId, slot));
   return { success: true, gameState: room.gameState };
 }
 
@@ -329,7 +344,7 @@ export function handleCancelEquipChoiceAction(socketId: string): { success: bool
   if (!roomInfo) return { success: false, error: '未找到房间' };
   const room = rooms.get(roomInfo.roomId);
   if (!room || !room.gameState) return { success: false, error: '房间或游戏状态不存在' };
-  room.gameState = withNotifyRoom(roomInfo.roomId, () => cancelEquipChoice(room.gameState!, roomInfo.playerId));
+  room.gameState = withNotifyRoom(roomInfo.roomId, roomInfo.playerId, () => cancelEquipChoice(room.gameState!, roomInfo.playerId));
   return { success: true, gameState: room.gameState };
 }
 
@@ -339,7 +354,7 @@ export function handleBrewConversionAction(socketId: string, cardId: string): { 
   if (!roomInfo) return { success: false, error: '未找到房间' };
   const room = rooms.get(roomInfo.roomId);
   if (!room || !room.gameState) return { success: false, error: '房间或游戏状态不存在' };
-  room.gameState = withNotifyRoom(roomInfo.roomId, () => handleBrewConversion(room.gameState!, roomInfo.playerId, cardId));
+  room.gameState = withNotifyRoom(roomInfo.roomId, roomInfo.playerId, () => handleBrewConversion(room.gameState!, roomInfo.playerId, cardId));
   return { success: true, gameState: room.gameState };
 }
 
@@ -356,13 +371,14 @@ export function handleDebugDrawCard(socketId: string, cardIdInput: string): { su
 
   const newCard: CardDef = {
     ...template,
-    id: `debug_${templateId}_${Date.now()}`,
+    // 确定性实例 ID（randomUUID），避免 Date.now 碰撞/非确定
+    id: generateCardInstanceId(templateId, 'debug'),
   };
 
   const state = deepClone(room.gameState!);
   const idx = state.players.findIndex(p => p.id === roomInfo.playerId);
   if (idx === -1) return { success: false, error: '玩家不存在' };
-  withNotifyRoom(roomInfo.roomId, () => addCardToHand(state.players[idx], newCard));
+  withNotifyRoom(roomInfo.roomId, roomInfo.playerId, () => addCardToHand(state.players[idx], newCard, state));
   room.gameState = state;
   return { success: true, gameState: state };
 }
@@ -381,7 +397,7 @@ export function handleSurrender(socketId: string): { success: boolean; gameState
   if (!roomInfo) return { success: false, error: '未找到房间' };
   const room = rooms.get(roomInfo.roomId);
   if (!room || !room.gameState) return { success: false, error: '房间或游戏状态不存在' };
-  room.gameState = withNotifyRoom(roomInfo.roomId, () => surrender(room.gameState!, roomInfo.playerId));
+  room.gameState = withNotifyRoom(roomInfo.roomId, roomInfo.playerId, () => surrender(room.gameState!, roomInfo.playerId));
   return { success: true, gameState: room.gameState };
 }
 
@@ -418,7 +434,7 @@ export function handleRematchAccept(socketId: string): { success: boolean; gameS
     room.players[0].id, room.players[0].name,
     room.players[1].id, room.players[1].name,
   );
-  room.gameState = withNotifyRoom(room.id, () => initGame(gameState));
+  room.gameState = withNotifyRoom(room.id, roomInfo.playerId, () => initGame(gameState));
   return { success: true, gameState: room.gameState };
 }
 

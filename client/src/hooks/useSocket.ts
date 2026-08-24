@@ -289,11 +289,11 @@ export function useSocket() {
     });
   }, []);
 
-  // ===== 新增：红石粉：选择限时状态（延长 1 回合） =====
-  const redstoneChoice = useCallback((buffIndex: number): Promise<{ success: boolean; error?: string }> => {
+  // ===== 红石粉：选择限时状态（P1：按 buffType + sourcePlayerId 定位，不再传数组下标） =====
+  const redstoneChoice = useCallback((buffType: string, sourcePlayerId?: string): Promise<{ success: boolean; error?: string }> => {
     return new Promise((resolve) => {
       const socket = getSocket();
-      socket.emit('redstone_choice', { buffIndex }, (response: { success: boolean; error?: string }) => {
+      socket.emit('redstone_choice', { buffType, sourcePlayerId: sourcePlayerId || '' }, (response: { success: boolean; error?: string }) => {
         resolve(response);
       });
     });
@@ -393,27 +393,27 @@ export function useSocket() {
       setTimeout(() => useGameStore.getState().setRematchState(null), 2000);
     });
 
-    socket.on('server_notify', (data: { text: string; target: string }) => {
+    socket.on('server_notify', (data: { text: string; target: string; playerId?: string | null }) => {
       console.log('[Notify] 客户端收到 server_notify:', data);
       const me = useGameStore.getState().player;
-      const isMyTurn = useGameStore.getState().isMyTurn;
+      // P0-6：按服务端下发的行动玩家 playerId 精确归属，而非 isMyTurn 推断
       if (data.target === 'all') {
         displayMessage(data.text);
-      } else if (data.target === 'self' && isMyTurn) {
+      } else if (data.target === 'self' && me && data.playerId === me.id) {
         displayMessage(data.text);
-      } else if (data.target === 'opponent' && !isMyTurn) {
+      } else if (data.target === 'opponent' && me && data.playerId !== me.id) {
         displayMessage(data.text);
       }
     });
 
-    socket.on('server_trigger', (data: { text: string; target: string }) => {
+    socket.on('server_trigger', (data: { text: string; target: string; playerId?: string | null }) => {
       console.log('[Trigger] 客户端收到 server_trigger:', data);
-      const isMyTurn = useGameStore.getState().isMyTurn;
+      const me = useGameStore.getState().player;
       if (data.target === 'all') {
         displayTrigger(data.text);
-      } else if (data.target === 'self' && isMyTurn) {
+      } else if (data.target === 'self' && me && data.playerId === me.id) {
         displayTrigger(data.text);
-      } else if (data.target === 'opponent' && !isMyTurn) {
+      } else if (data.target === 'opponent' && me && data.playerId !== me.id) {
         displayTrigger(data.text);
       }
     });

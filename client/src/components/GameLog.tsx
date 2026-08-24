@@ -54,7 +54,7 @@ export default function GameLog({ log }: Props) {
             >
               <div className="flex-shrink-0 pt-0.5">
                 <span className="inline-flex items-center justify-center min-w-[28px] h-5 px-1.5 rounded bg-white/5 text-[10px] font-mono font-medium text-text-secondary/70 border border-white/5">
-                  T{entry.turnNumber}
+                  {entry.playerId}
                 </span>
               </div>
               <p className="text-sm text-text-primary/80 leading-relaxed pt-0.5 group-hover:text-text-primary transition-colors duration-150">

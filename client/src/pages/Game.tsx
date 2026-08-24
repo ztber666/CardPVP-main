@@ -5,8 +5,6 @@ import { CardDef, GamePhase, CostType, COST_TYPE_NAMES, BUFF_NAMES } from '@shar
 import PlayerInfo from '../components/PlayerInfo';
 import PlayerHand from '../components/PlayerHand';
 import ActionBar from '../components/ActionBar';
-import GameLog from '../components/GameLog';
-import CardDetail from '../components/CardDetail';
 import NotificationToast from '../components/NotificationToast';
 import { displayMessage } from '../store/notificationStore';
 import { getCardImageUrl } from '../utils/cardImage';
@@ -22,7 +20,7 @@ import GameLogPanel from '../components/GameLogPanel';
 import BuffBadge from '../components/BuffBadge';
 import CollectionModal from '../components/CollectionModal';
 import RulesModal from '../components/RulesModal';
-import { BUFF_ICON_MAP, BUFF_DESCRIPTIONS } from '../components/BuffCollection';
+import { BUFF_ICON_MAP } from '../components/BuffCollection';
 import { useSettingsStore } from '../store/settingsStore';
 
 export default function Game() {
@@ -318,11 +316,11 @@ useEffect(() => {
     setPending(false);
   }, [cancelEquipChoice]);
 
-  // 红石粉：选择限时状态（按弹窗列表顺序的索引）
-  const handleRedstoneSelect = useCallback(async (buffIndex: number) => {
+  // 红石粉：选择限时状态（P1：按 buffType + sourcePlayerId 定位，不再传数组下标）
+  const handleRedstoneSelect = useCallback(async (buffType: string, sourcePlayerId?: string) => {
     setShowRedstoneDialog(false);
     setPending(true);
-    await redstoneChoice(buffIndex);
+    await redstoneChoice(buffType, sourcePlayerId || '');
     setPending(false);
   }, [redstoneChoice]);
 
@@ -529,11 +527,11 @@ useEffect(() => {
         </div>
         {recentPlayedCard ? (
           <PlayedCardOverlay key={recentPlayedCard.key} card={recentPlayedCard.card} playerName={recentPlayedCard.playerName} variant={recentPlayedCard.variant} onClose={handleOverlayClose}>
-            <TriggerEffectPanel />
+            <TriggerEffectPanel isMyTurn={isMyTurn} myName={me.name} />
           </PlayedCardOverlay>
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-20">
-            <TriggerEffectPanel />
+            <TriggerEffectPanel isMyTurn={isMyTurn} myName={me.name} />
           </div>
         )}
       </div>
@@ -658,7 +656,7 @@ useEffect(() => {
       )}
 
       {/* 对局日志面板 */}
-      {showGameLog && <GameLogPanel log={gameState.log} onClose={() => setShowGameLog(false)} />}
+      {showGameLog && <GameLogPanel log={gameState.log} onClose={() => setShowGameLog(false)} myPlayerId={me.id} />}
 
       {/* ===== 游戏结束弹窗 ===== */}
       {showResult && gameState?.phase === GamePhase.GameOver && (
@@ -814,7 +812,7 @@ useEffect(() => {
                   return <p className="text-sm text-text-secondary text-center py-4">目标没有限时状态</p>;
                 }
                 return timedBuffs.map((buff, idx) => (
-                  <button key={idx} onClick={() => handleRedstoneSelect(idx)}
+                  <button key={`${buff.buffType}-${buff.sourcePlayerId}-${idx}`} onClick={() => handleRedstoneSelect(buff.buffType, buff.sourcePlayerId)}
                     className="w-full flex items-center gap-3 p-3 rounded-xl border border-card-border hover:border-accent-equip/40 transition-colors hover:bg-card-bg/50 text-left"
                   >
                     <img src={`/assets/buff/buff${BUFF_ICON_MAP[buff.buffType as string]}.png`} alt="" className="w-8 h-8 object-contain" style={{ imageRendering: 'pixelated' }} />
