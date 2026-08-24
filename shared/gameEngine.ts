@@ -2,7 +2,7 @@ import { GameState, PlayerState, CardDef, GamePhase, GameLogEntry, PlayCardActio
 import { deepClone, applyEffectToPlayer, getBuffStacks, findBuff } from './buffEngine'; 
 import { drawCards, shuffleDeck, applyCard, damage, DamageType, showMessage, addCardToHand, showTrigger, heal, consumeInPlace } from './cardEngine'; 
 import { processTurnStartBuffs, processTurnEndBuffs } from './buffEngine'; 
-import { DEFAULT_MAX_HP, INITIAL_DRAW_COUNT, TURN_DRAW_COUNT, buildTestDeck, CARDS, MAX_LOG_ENTRIES, generateCardInstanceId } from './constants'; 
+import { DEFAULT_MAX_HP, INITIAL_DRAW_COUNT, TURN_DRAW_COUNT, buildTestDeck, CARDS, MAX_LOG_ENTRIES, generateCardInstanceId, DEFAULT_HAND_LIMIT } from './constants'; 
 import { validatePlayCard } from './validation';
 
 // ===== 公共工具 =====
@@ -65,7 +65,8 @@ export function createGame(
         lastPlayedCardName: '', 
         lastPlayedCardEffects: [], 
         lastPlayedCardCostType: 'action' as any, 
-        causePhysicalDamage: false, 
+        causePhysicalDamageFen: false, 
+        causePhysicalDamageBang: false,
         blazePowderUsedThisTurn: false,
         enchantBurstReady: 0, // 初始无可用魔咒爆发
         pendingGuessCardId: '', 
@@ -104,7 +105,8 @@ export function createGame(
         lastPlayedCardName: '', 
         lastPlayedCardEffects: [], 
         lastPlayedCardCostType: 'action' as any, 
-        causePhysicalDamage: false, 
+        causePhysicalDamageFen: false, 
+        causePhysicalDamageBang: false,
         blazePowderUsedThisTurn: false,
         enchantBurstReady: 0, // 初始无可用魔咒爆发
         pendingGuessCardId: '', 
@@ -179,7 +181,8 @@ export function startTurn(state: GameState): GameState {
   player.lastPlayedCardName = '';
   player.lastPlayedCardEffects = [];
   player.lastPlayedCardCostType = CostType.Action;
-  player.causePhysicalDamage = false;
+  player.causePhysicalDamageFen = false;
+  player.causePhysicalDamageBang = false;
   // P1：清理上回合残留的交互流程状态（蜘蛛网/诡异钓竿/红石粉/侦测器/运输矿车），
   // 防止流程中断后状态残留
   player.pendingBucketChoice = '';
@@ -537,7 +540,7 @@ export function triggerDiscardEvents(player: PlayerState, card: CardDef, s: Game
   }
 
   // 烈焰棒：丢弃一张牌可造成2点火焰伤害
-  if (player.equipment?.weapon?.name === '烈焰棒' && player.causePhysicalDamage && target) {
+  if (player.equipment?.weapon?.name === '烈焰棒' && player.causePhysicalDamageBang && target) {
     damage(player, target, DamageType.Fire, 2, s);
     if (s) {
       s.log.push({
@@ -605,7 +608,8 @@ export function discardFromHand(state: GameState, playerId: string, cardId: stri
       lastPlayedName: player.lastPlayedCardName, 
       lastPlayedEffects: [...(player.lastPlayedCardEffects || [])],
       lastPlayedCostType: player.lastPlayedCardCostType,
-      causePhysicalDamage: player.causePhysicalDamage,
+      causePhysicalDamageFen: player.causePhysicalDamageFen,
+      causePhysicalDamageBang: player.causePhysicalDamageBang,
       blazePowderUsed: player.blazePowderUsedThisTurn,
     }; 
 
@@ -628,7 +632,8 @@ export function discardFromHand(state: GameState, playerId: string, cardId: stri
     player.lastPlayedCardName = before.lastPlayedName;
     player.lastPlayedCardEffects = before.lastPlayedEffects;
     player.lastPlayedCardCostType = before.lastPlayedCostType;
-    player.causePhysicalDamage = before.causePhysicalDamage;
+    player.causePhysicalDamageFen = before.causePhysicalDamageFen;
+    player.causePhysicalDamageBang = before.causePhysicalDamageBang;
     player.blazePowderUsedThisTurn = before.blazePowderUsed; 
 
     player.discardPile.push(card); 
@@ -690,6 +695,30 @@ export function unequipCard(state: GameState, playerId: string, slot: string): G
   let player = s.players[idx]; 
   const card = player.equipment[slot as keyof typeof player.equipment]; 
   if (!card) return s; 
+  const handLimit = DEFAULT_HAND_LIMIT + (player.handLimitBonus || 0);
+  const equippedCount = [player.equipment.equip, player.equipment.weapon, player.equipment.field].filter(Boolean).length;
+  if (card.name === '村庄') {
+    // 村庄卸下时需要清除手牌上限加成
+    player.handLimitBonus = 0;
+    if (player.hand.length + equippedCount >= handLimit) {
+      // 超出手牌上限的部分直接丢弃（进入弃牌堆），触发丢弃事件
+      const excessCount = player.hand.length + equippedCount - handLimit;
+      const excessCards = player.hand.splice(-excessCount, excessCount);
+      s.log.push({
+        playerId: s.players[s.currentTurnIndex].id,
+        message: `${player.name}卸下村庄，手牌超出上限${excessCount}张`,
+        segments: [
+          [{ type: 'text', text: `${player.name}卸下村庄`, bold: true },
+           { type: 'text', text: `手牌超出上限${excessCount}张` }],
+        ],
+        timestamp: Date.now(),
+      });
+      for (const excessCard of excessCards) {
+        discardFromHand(s, player.id, excessCard.id);
+      }
+    }
+  }
+
   delete player.equipment[slot as keyof typeof player.equipment]; 
   // 装备卸下时直接丢弃（进入弃牌堆），触发丢弃事件 
   player.discardPile.push(card); 

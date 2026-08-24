@@ -115,13 +115,23 @@ export function processTurnStartBuffs(player: PlayerState, opponent: PlayerState
   }
   const selfHorde = getBuffStacks(p, BuffType.Horde, p.id);
   if(selfHorde > 0) {
-    // 尸潮是 buff 结算，不是“打出的卡牌”，isCard=false —— 不满足烈焰粉/烈焰棒的“卡牌物理伤害”前提
-    const dealt = damage(p, p, DamageType.Physical, selfHorde, state);
-    showTrigger([{ type: 'buff', buffType: BuffType.Horde }], 'all');
-    logSettlementEvent(state, `尸潮：${p.name}受到${dealt}点物理伤害`, [
-      { type: 'buff', buffType: BuffType.Horde },
-      { type: 'hpChange', playerName: p.name, hpDelta: -dealt },
-    ], p.id);
+    if(player.equipment?.field?.name === '村庄') {
+      showTrigger([
+        { type: 'card', cardId: player.equipment.field.id },
+        { type: 'text', text: `${p.name}免疫尸潮` },
+      ], 'all');
+      logSettlementEvent(state, `村庄：${p.name}免疫尸潮`, [
+        { type: 'card', cardId: player.equipment.field.id },
+        { type: 'text', text: `${p.name}免疫尸潮` },
+      ], p.id);
+    } else {
+      const dealt = damage(p, p, DamageType.Physical, selfHorde, state);
+      showTrigger([{ type: 'buff', buffType: BuffType.Horde }], 'all');
+      logSettlementEvent(state, `尸潮：${p.name}受到${dealt}点物理伤害`, [
+        { type: 'buff', buffType: BuffType.Horde },
+        { type: 'hpChange', playerName: p.name, hpDelta: -dealt },
+      ], p.id);
+    }
   }
   const selfHeal = getBuffStacks(p, BuffType.Heal, p.id);
   if(selfHeal > 0) {
@@ -145,7 +155,6 @@ export function processTurnStartBuffs(player: PlayerState, opponent: PlayerState
   }
   const outHorde = getBuffStacks(opponent, BuffType.Horde, p.id);
   if(outHorde > 0) {
-    // 同 selfHorde：尸潮是 buff 结算而非卡牌伤害，isCard=false
     const dealt = damage(p, opponent, DamageType.Physical, outHorde, state);
     showTrigger([{ type: 'buff', buffType: BuffType.Horde }], 'all');
     logSettlementEvent(state, `尸潮：${opponent.name}受到${dealt}点物理伤害`, [

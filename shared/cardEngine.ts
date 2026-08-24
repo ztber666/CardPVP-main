@@ -272,12 +272,12 @@ export function damage(source: PlayerState, target: PlayerState, type: DamageTyp
     }
     //烈焰棒：标记触发条件（仅卡牌打出的物理伤害满足“上一张牌造成物理伤害”前提）
     if (source.equipment?.weapon?.name === '烈焰棒') {
-      source.causePhysicalDamage = true;
+      source.causePhysicalDamageBang = true;
       showMessage('丢弃一张牌可造成2点火焰伤害', "self")
     }
     //烈焰粉提示（同样只在卡牌物理伤害时置位）
     if (!source.blazePowderUsedThisTurn && source.hand.filter(card => card.name === '烈焰粉').length > 0) {
-      source.causePhysicalDamage = true;
+      source.causePhysicalDamageFen = true;
       showMessage('打出烈焰粉可额外造成3点火焰伤害', "self");
     }
     //幽匿尖啸体：造成物理伤害时所有人增加1点凋零
@@ -458,7 +458,7 @@ export function applyCard(
   }
   
   //处理烈焰粉判断逻辑
-  if(card.name !== '烈焰粉' && p.causePhysicalDamage) p.causePhysicalDamage = false;
+  if(card.name !== '烈焰粉' && p.causePhysicalDamageFen) p.causePhysicalDamageFen = false;
 
   // 处理装备/武器/场地替换（始终作用在卡牌使用者身上）
   if (card.costType === CostType.Equip ||
@@ -611,7 +611,7 @@ export function applyCard(
       if (isSelfTarget) p = target; else t = target;
 
     } else if (effect.buffType === BuffType.ReduceMaxHp) {
-      // 降低生命上限（固定值）
+      // 降低生命上限
       const target = isSelfTarget ? p : t;
       const reduction = Math.min(effect.value, target.maxHp - 1);
       target.maxHp = Math.max(1, target.maxHp - reduction);
@@ -867,16 +867,11 @@ export function applyCard(
   }
 
   // 烈焰粉：上一张牌造成物理伤害后打出额外造成火焰伤害（每回合限1次）
-  // 自瞄时忽略条件（不需要物理伤害前置、不受回合限次），且不影响两个标记
-  if (card.name === '烈焰粉') {
+  if (card.name === '烈焰粉' && p.causePhysicalDamageFen && !p.blazePowderUsedThisTurn) {
     const blazeTarget = isSelfTarget ? p : t;
-    if (isSelfTarget) {
-      damage(p, blazeTarget, DamageType.Fire, 3, state);
-    } else if (p.causePhysicalDamage && !p.blazePowderUsedThisTurn) {
-      damage(p, blazeTarget, DamageType.Fire, 3, state);
-      p.causePhysicalDamage = false;
-      p.blazePowderUsedThisTurn = true;
-    }
+    damage(p, blazeTarget, DamageType.Fire, 2, state);
+    p.causePhysicalDamageFen = false;
+    p.blazePowderUsedThisTurn = true;
   }
 
   // 重生锚：造成2点火焰伤害

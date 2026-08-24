@@ -116,7 +116,8 @@ export interface PlayerState {
   lastPlayedCardName: string;     // 本回合上一张打出的牌名
   lastPlayedCardEffects: EffectDef[];  // 上一张牌的效果（玻璃板用）
   lastPlayedCardCostType: CostType;    // 上一张牌的消耗类型
-  causePhysicalDamage: boolean;   // 上一张牌是否造成物理伤害
+  causePhysicalDamageFen: boolean;   // 上一张牌是否造成物理伤害(烈焰粉)
+  causePhysicalDamageBang: boolean;   // 上一张牌是否造成物理伤害(烈焰棒)
   blazePowderUsedThisTurn: boolean; // 烈焰粉：本回合是否已使用过
   enchantBurstReady: number; // 当前可触发的魔咒爆发次数（获得当回合不可用，回合结束时转为可用）
   pendingGuessCardId: string;     // 侦测器：待猜测的对手牌ID
