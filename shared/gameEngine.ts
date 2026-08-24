@@ -14,7 +14,7 @@ export function checkGameOver(state: GameState): boolean {
       state.phase = GamePhase.GameOver;
       state.winnerId = state.players.find(pl => pl.id !== state.players[i].id)?.id;
       state.log.push({
-        turnNumber: state.turnNumber,
+        playerId: state.players[state.currentTurnIndex].id,
         message: `${state.players[i].name}的HP降为0，${state.winnerId ? state.players.find(pl => pl.id === state.winnerId)?.name : '对方'}获胜！`,
         timestamp: Date.now(),
       });
@@ -137,10 +137,10 @@ export function initGame(state: GameState): GameState {
   s.currentTurnIndex = Math.random() < 0.5 ? 0 : 1; 
   // 摸初始手牌 
   for (let i = 0; i < s.players.length; i++) { 
-    s.players[i] = drawCards(s.players[i], INITIAL_DRAW_COUNT); 
+    s.players[i] = drawCards(s.players[i], INITIAL_DRAW_COUNT, s); 
   } 
   //先手玩家回合摸牌 
-  s.players[s.currentTurnIndex] = drawCards(s.players[s.currentTurnIndex], TURN_DRAW_COUNT); 
+  s.players[s.currentTurnIndex] = drawCards(s.players[s.currentTurnIndex], TURN_DRAW_COUNT, s); 
   return s; 
 } 
 
@@ -202,7 +202,7 @@ export function startTurn(state: GameState): GameState {
  // 摸牌写入战斗记录（隐藏具体卡牌，只显示张数；爆牌丢弃由丢弃流程单独记录）
 const drawnCards = player.hand.slice(handLenBefore);
 s.log.push({
-  turnNumber: s.turnNumber,
+  playerId: player.id,
   message: `${player.name}摸了${drawnCards.length}张牌`,
   segments: [
     [{ type: 'text', text: `${player.name}摸牌`, bold: true },
@@ -255,7 +255,7 @@ export function endTurn(state: GameState): GameState {
   const endingIdx = s.currentTurnIndex; 
   const name = s.players[endingIdx].name; 
   s.log.push({ 
-    turnNumber: s.turnNumber, 
+    playerId: s.players[endingIdx].id,
     message: `${name}行动结束`, 
     timestamp: Date.now(), 
     type: 'endTurn', 
@@ -302,7 +302,7 @@ export function endTurn(state: GameState): GameState {
     // 只在有变化时记录，所有 buff 合并为一行
     if (buffSegs.length > 1) {
       s.log.push({
-        turnNumber: s.turnNumber,
+        playerId: s.players[endingIdx].id,
         message: `${playerName}的buff变化`,
         segments: [buffSegs],
         type: 'endTurn',
@@ -326,9 +326,9 @@ export function endTurn(state: GameState): GameState {
       // 计算过期的袭击之兆总层数（多来源时层数累加，stacks 未定义时按 1 层计）
       const totalStacks = expiredAttackSigns.reduce((sum, b) => sum + (b.stacks || 1), 0);
       const dmg = 5 * totalStacks;
-      damage(dmgSource, highest, DamageType.Real, dmg, false);
+      damage(dmgSource, highest, DamageType.Real, dmg, s);
       s.log.push({
-        turnNumber: s.turnNumber,
+        playerId: s.players[endingIdx].id,
         message: `袭击之兆过期，${highest.name}（血量最高）受到${dmg}点魔法伤害`,
         segments: [
           [
@@ -359,7 +359,7 @@ export function endTurn(state: GameState): GameState {
           { type: 'text', text: `${endingPlayer.name}-${withered}` },
         ], 'all');
         s.log.push({
-          turnNumber: s.turnNumber,
+          playerId: s.players[endingIdx].id,
           message: `海龟壳：${endingPlayer.name}结束出牌时移除了${withered}点凋零`,
           segments: [
             [{ type: 'card', cardId: endingPlayer.equipment.equip.id },
@@ -389,7 +389,7 @@ export function endTurn(state: GameState): GameState {
   if (s.durationTickCounter === 0) { 
     s.turnNumber += 1; 
     s.log.push({ 
-      turnNumber: s.turnNumber, 
+      playerId: s.players[s.currentTurnIndex].id,
       message: `第${s.turnNumber}回合开始`, 
       timestamp: Date.now(), 
       type: 'endTurn', 
@@ -399,11 +399,11 @@ export function endTurn(state: GameState): GameState {
   return s; 
 } 
 
-export function handleDiscardBuffs(player: PlayerState, s?: GameState) { 
+export function handleDiscardBuffs(player: PlayerState, s: GameState) { 
   // 绑定诅咒：丢弃牌时受伤害 
   const curseStack = getBuffStacks(player, BuffType.DamageOnDiscard); 
   if (curseStack > 0 && player.damageOnDiscardCount < 1) { 
-    damage(player, player, DamageType.Real, curseStack, false);
+    damage(player, player, DamageType.Real, curseStack, s);
     player.damageOnDiscardCount += 1;
     // 'all'：受害者不一定是“当前行动玩家”（如幽匿尖啸体强制对手弃牌），
     // 若用 'self' 会按行动玩家归属导致提示发给错误的人
@@ -411,7 +411,7 @@ export function handleDiscardBuffs(player: PlayerState, s?: GameState) {
       { type: 'buff', buffType: BuffType.DamageOnDiscard },
     ], 'all');
     s?.log.push({
-      turnNumber: s.turnNumber,
+      playerId: s.players[s.currentTurnIndex].id,
       message: `${player.name}丢弃牌时受到${curseStack}点绑定诅咒伤害`,
       segments: [
         [{ type: 'buff', buffType: BuffType.DamageOnDiscard },
@@ -423,9 +423,9 @@ export function handleDiscardBuffs(player: PlayerState, s?: GameState) {
   // 下界荒地：丢弃牌时获得1点护盾（每回合限2次）
   if (player.equipment?.field?.name === '下界荒地') {
     const opp = s?.players.find(p => p.id !== player.id);
-    applyEffectToPlayer(player, BuffType.Shield, 1, undefined, player.equipment.field.id, player.id, opp, s);
+    applyEffectToPlayer(player, BuffType.Shield, 1, undefined, player.equipment.field.id, s, player.id, opp);
     s?.log.push({ 
-      turnNumber: s.turnNumber, 
+      playerId: s.players[s.currentTurnIndex].id,
       message: `${player.name}丢弃牌时获得1点护盾（下界荒地）`, 
       timestamp: Date.now(), 
     }); 
@@ -440,14 +440,14 @@ export function handleDiscardBuffs(player: PlayerState, s?: GameState) {
  * @param card 摸到的牌
  * @param s 游戏状态（可选，用于日志记录）
  */
-export function triggerDrawEvents(player: PlayerState, card: CardDef, s?: GameState): void {
+export function triggerDrawEvents(player: PlayerState, card: CardDef, s: GameState): void {
   // 陷阱箱：摸牌时获得凋零
   const witherOnDrawStacks = getBuffStacks(player, BuffType.WitherOnDraw);
   if (witherOnDrawStacks > 0) {
-    applyEffectToPlayer(player, BuffType.Wither, witherOnDrawStacks, undefined, 'wither_on_draw', player.id);
+    applyEffectToPlayer(player, BuffType.Wither, witherOnDrawStacks, undefined, 'wither_on_draw', s, player.id);
     if (s) {
     s.log.push({
-      turnNumber: s.turnNumber,
+      playerId: s.players[s.currentTurnIndex].id,
       message: `${player.name}摸牌时触发陷阱箱，获得${witherOnDrawStacks}层凋零`,
       segments: [
         [{ type: 'buff', buffType: BuffType.WitherOnDraw },
@@ -474,14 +474,14 @@ export function triggerDrawEvents(player: PlayerState, card: CardDef, s?: GameSt
  * @param s 游戏状态（可选，用于日志记录）
  * @param target 对手玩家（可选，用于烈焰棒等需要指定目标的效果）
  */
-export function triggerDiscardEvents(player: PlayerState, card: CardDef, s?: GameState, target?: PlayerState): void {
+export function triggerDiscardEvents(player: PlayerState, card: CardDef, s: GameState, target?: PlayerState): void {
   // 仙人掌：丢弃时触发效果，摸1张牌
   if (card.name === '仙人掌') {
     const updated = drawCards(player, 1, s, target);
     Object.assign(player, updated);
     if (s) {
       s.log.push({
-        turnNumber: s.turnNumber,
+        playerId: s.players[s.currentTurnIndex].id,
         message: `${player.name}丢弃了仙人掌，触发效果摸了1张牌`,
         segments: [
           [{ type: 'text', text: `${player.name}丢弃`, bold: true },
@@ -498,10 +498,10 @@ export function triggerDiscardEvents(player: PlayerState, card: CardDef, s?: Gam
   }else if (card.name === '灾厄旗帜') {
     // 灾厄旗帜：丢弃时回1点血
     const opp = s?.players.find(pl => pl.id !== player.id);
-    heal(player, player, 1, opp, s);
+    heal(player, player, 1, s, opp);
     if (s) {
       s.log.push({
-        turnNumber: s.turnNumber,
+        playerId: s.players[s.currentTurnIndex].id,
         message: `${player.name}丢弃了灾厄旗帜，触发效果回复1点血量`,
         segments: [
           [{ type: 'text', text: `${player.name}丢弃`, bold: true },
@@ -515,10 +515,10 @@ export function triggerDiscardEvents(player: PlayerState, card: CardDef, s?: Gam
     ], 'all');
   }else if (card.name === '海洋之心') {
     // 海洋之心：丢弃时触发效果，获得2层护盾
-    applyEffectToPlayer(player, BuffType.Shield, 2, undefined, card.id, player.id, undefined, s);
+    applyEffectToPlayer(player, BuffType.Shield, 2, undefined, card.id, s, player.id);
     if (s) {
       s.log.push({
-        turnNumber: s.turnNumber,
+        playerId: s.players[s.currentTurnIndex].id,
         message: `${player.name}丢弃了海洋之心，触发效果获得2层护盾`,
         segments: [
           [{ type: 'text', text: `${player.name}丢弃`, bold: true },
@@ -538,10 +538,10 @@ export function triggerDiscardEvents(player: PlayerState, card: CardDef, s?: Gam
 
   // 烈焰棒：丢弃一张牌可造成2点火焰伤害
   if (player.equipment?.weapon?.name === '烈焰棒' && player.causePhysicalDamage && target) {
-    damage(player, target, DamageType.Fire, 2, true);
+    damage(player, target, DamageType.Fire, 2, s);
     if (s) {
       s.log.push({
-        turnNumber: s.turnNumber,
+        playerId: s.players[s.currentTurnIndex].id,
         message: `烈焰棒生效：${target.name}受到2点火焰伤害`,
         segments: [
           [{ type: 'card', cardId: player.equipment.weapon.id },
@@ -635,7 +635,7 @@ export function discardFromHand(state: GameState, playerId: string, cardId: stri
     player.lastDiscardedCardDef.push(card);
 
     s.log.push({
-      turnNumber: s.turnNumber,
+      playerId: s.players[s.currentTurnIndex].id,
       message: `${player.name}触发了魔咒爆发，使${card.name}生效`,
       segments: [
         [{ type: 'text', text: `${player.name}魔咒爆发`, bold: true },
@@ -663,7 +663,7 @@ export function discardFromHand(state: GameState, playerId: string, cardId: stri
   s.players[idx] = player; 
   s.players[1 - idx] = target; 
   s.log.push({
-    turnNumber: s.turnNumber,
+    playerId: s.players[s.currentTurnIndex].id,
     message: `${player.name}丢弃了${card.name}`,
     segments: [
       [{ type: 'text', text: `${player.name}丢弃`, bold: true },
@@ -696,7 +696,7 @@ export function unequipCard(state: GameState, playerId: string, slot: string): G
   handleDiscardBuffs(player, s); 
   s.players[idx] = player; 
   s.log.push({ 
-    turnNumber: s.turnNumber, 
+    playerId: s.players[s.currentTurnIndex].id,
     message: `${player.name}卸下了${card.name}`, 
     timestamp: Date.now(), 
   }); 
@@ -720,7 +720,7 @@ export function handleGuessWeight(state: GameState, playerId: string, guessWeigh
     player.pendingGuessCardWeight = 0;
     player.pendingGuessCardName = '';
     s.log.push({
-      turnNumber: s.turnNumber,
+      playerId: s.players[s.currentTurnIndex].id,
       message: `${player.name}要猜测的牌已不在${targetPlayer.name}手中，猜测失效`,
       timestamp: Date.now(),
     });
@@ -730,7 +730,7 @@ export function handleGuessWeight(state: GameState, playerId: string, guessWeigh
   const correct = player.pendingGuessCardWeight === guessWeight; 
   const msg = correct ? `${player.name}猜中了权重(${guessWeight})！下次物理伤害×1.75` : `${player.name}猜错了权重(${guessWeight})，正确答案是${player.pendingGuessCardWeight}`; 
   if (correct) {
-    applyEffectToPlayer(player, BuffType.DamageBoost, 1, undefined, 'detector', player.id); 
+    applyEffectToPlayer(player, BuffType.DamageBoost, 1, undefined, 'detector', s, player.id); 
     showTrigger([
       { type: 'buff', buffType: BuffType.DamageBoost },
       { type: 'text', text: '物理×1.75' },
@@ -740,7 +740,7 @@ export function handleGuessWeight(state: GameState, playerId: string, guessWeigh
   player.pendingGuessCardWeight = 0; 
   player.pendingGuessCardName = '';
   s.log.push({ 
-    turnNumber: s.turnNumber, 
+    playerId: s.players[s.currentTurnIndex].id,
     message: msg, 
     timestamp: Date.now(), 
   }); 
@@ -767,7 +767,7 @@ export function handleDraftPick(state: GameState, playerId: string, cardIndex: n
   if (owner.draftPickedBy && owner.draftPickedBy[cardIndex]) return s; 
   // 牌给当前选牌的玩家 
   const picked = owner.draftCards[cardIndex]; 
-  addCardToHand(s.players[pickerIdx], picked); 
+  addCardToHand(s.players[pickerIdx], picked, s); 
   // 触发摸牌事件（陷阱箱等）
   triggerDrawEvents(s.players[pickerIdx], picked, s);
   owner.draftPickCount += 1; 
@@ -784,7 +784,7 @@ if (owner.draftPickCount < owner.draftCards.length) {
   } 
   s.players[ownerIdx] = owner; 
   s.log.push({ 
-    turnNumber: s.turnNumber, 
+    playerId: s.players[s.currentTurnIndex].id,
     message: s.players[pickerIdx].name + "选择了" + picked.name, 
     timestamp: Date.now() 
   }); 
@@ -805,7 +805,7 @@ export function handleBucketChoice(state: GameState, playerId: string, lockType:
     player.pendingBucketChoice = '';
     s.players[idx] = player;
     s.log.push({
-      turnNumber: s.turnNumber,
+      playerId: s.players[s.currentTurnIndex].id,
       message: `海龟壳免疫蜘蛛网，${opponent.name}未被封锁`,
       timestamp: Date.now(),
     });
@@ -813,9 +813,9 @@ export function handleBucketChoice(state: GameState, playerId: string, lockType:
     return s;
   }
   if (lockType === 'action') { 
-    applyEffectToPlayer(opponent, BuffType.LockAction, 1, 1, 'bucket', player.id); 
+    applyEffectToPlayer(opponent, BuffType.LockAction, 1, 1, 'bucket', s, player.id); 
     s.log.push({ 
-      turnNumber: s.turnNumber, 
+      playerId: s.players[s.currentTurnIndex].id, 
       message: `${player.name}封锁了对手的行动牌`, 
       timestamp: Date.now() 
     }); 
@@ -824,9 +824,9 @@ export function handleBucketChoice(state: GameState, playerId: string, lockType:
       { type: 'text', text: `${opponent.name}行动封锁` },
     ], 'all');
   } else if (lockType === 'strategy') {
-    applyEffectToPlayer(opponent, BuffType.LockStrategy, 1, 1, 'bucket', player.id);
+    applyEffectToPlayer(opponent, BuffType.LockStrategy, 1, 1, 'bucket', s, player.id);
     s.log.push({
-      turnNumber: s.turnNumber,
+      playerId: s.players[s.currentTurnIndex].id,
       message: `${player.name}封锁了对手的锦囊牌`,
       timestamp: Date.now()
     });
@@ -863,7 +863,7 @@ export function handleRedstoneChoice(state: GameState, playerId: string, buffTyp
     const newTurns = oldTurns + 1;
     chosen.remainingTurns = newTurns;
     s.log.push({
-        turnNumber: s.turnNumber,
+        playerId: s.players[s.currentTurnIndex].id,
         message: `${player.name}使用红石粉延长了${target.name}的${BUFF_NAMES[chosen.buffType]}1回合`,
         segments: [
             [{ type: 'card', cardId: 'card_47' }, { type: 'buff', buffType: chosen.buffType }, { type: 'text', text: `${oldTurns}→${newTurns}` }],
@@ -894,14 +894,14 @@ export function handleEquipChoice(state: GameState, playerId: string, slot: stri
   const card = opponent.equipment[slotKey]; 
   if (!card) { 
     s.log.push({ 
-      turnNumber: s.turnNumber, 
+      playerId: s.players[s.currentTurnIndex].id,
       message: '该槽位没有装备', 
       timestamp: Date.now() 
     }); 
     return s; 
   } 
   s.log.push({ 
-    turnNumber: s.turnNumber, 
+    playerId: s.players[s.currentTurnIndex].id,
     message: `诡异钓竿触发！`, 
     timestamp: Date.now() 
   }); 
@@ -927,7 +927,7 @@ export function cancelEquipChoice(state: GameState, playerId: string): GameState
       // 用确定性实例 ID（randomUUID），避免 Date.now 碰撞/非确定
       id: generateCardInstanceId(player.pendingEquipCard.id, 'return'),
     };
-    addCardToHand(player, returnedCard);
+    addCardToHand(player, returnedCard, s);
     player.pendingEquipCard = undefined;
   }
 
@@ -940,7 +940,7 @@ export function cancelEquipChoice(state: GameState, playerId: string): GameState
   s.players[idx] = player;
 
   s.log.push({
-    turnNumber: s.turnNumber,
+    playerId: s.players[s.currentTurnIndex].id,
     message: '诡异钓竿取消，卡牌已返还',
     timestamp: Date.now(),
   });
@@ -971,7 +971,7 @@ export function handleBrewConversion(state: GameState, playerId: string, cardId:
   // 用确定性实例 ID（randomUUID），避免 Date.now 碰撞/非确定
   player.hand[cardIdx] = { ...template, id: generateCardInstanceId(template.id, 'brew') }; 
   s.log.push({ 
-    turnNumber: s.turnNumber, 
+    playerId: s.players[s.currentTurnIndex].id,
     message: `酿造台：将1张${card.name}转化为${targetName}`, 
     timestamp: Date.now() 
   }); 
@@ -988,7 +988,7 @@ export function surrender(state: GameState, playerId: string): GameState {
   s.phase = GamePhase.GameOver;
   s.winnerId = s.players[1 - idx].id;
   s.log.push({
-    turnNumber: s.turnNumber,
+    playerId: s.players[s.currentTurnIndex].id,
     message: `${s.players[idx].name}投降了`,
     timestamp: Date.now(),
   });

@@ -163,7 +163,7 @@ export interface TriggerEntry {
 
 // ===== 日志条目 =====
 export interface GameLogEntry {
-  turnNumber: number;
+  playerId: string;                          // 触发事件的玩家ID
   message: string;                          // 纯文本回退
   segments?: ContentSegment[][];            // 结构化内容：每行是一个 ContentSegment[]
   type?: 'endTurn' | 'warning' | 'error' | 'drawCard';

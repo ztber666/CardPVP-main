@@ -3,26 +3,64 @@ import { useSettingsStore } from '../store/settingsStore';
 import { ContentSegment } from '@shared/types';
 import SegmentDetailImage from './SegmentDetailImage';
 
+interface Props {
+  isMyTurn: boolean;
+  myName: string;
+}
+
+/** 根据当前回合视角处理文本前缀 */
+function getDisplayText(segment: ContentSegment, isMyTurn: boolean): string {
+  const rawText = segment.text || '';
+
+  if (isMyTurn) {
+    if (rawText.startsWith('自己')) {
+      return `你${rawText.slice(2)}`;
+    }
+    return rawText;
+  }
+
+  // 对方视角
+  if (rawText.startsWith('对方')) {
+    return `你${rawText.slice(2)}`;
+  }
+
+  if (rawText.startsWith('自己')) {
+    return `对方${rawText.slice(2)}`;
+  }
+
+  return rawText;
+}
+
 /** 渲染单个内容段 */
-function SegmentRenderer({ segment }: { segment: ContentSegment }) {
+function SegmentRenderer({ segment, isMyTurn, myName }: { segment: ContentSegment; isMyTurn: boolean; myName: string }) {
   switch (segment.type) {
-    case 'text':
+    case 'text': {
+      const displayText = getDisplayText(segment, isMyTurn);
+
       return (
-        <span className={`text-xs leading-5 text-text-secondary ${segment.bold ? 'font-bold text-text-primary' : ''}`}>
-          {segment.text}
+        <span
+          className={`text-xs leading-5 text-text-secondary ${
+            segment.bold ? 'font-bold text-text-primary' : ''
+          }`}
+        >
+          {displayText}
         </span>
       );
+    }
+
     case 'card':
     case 'buff':
       return <SegmentDetailImage segment={segment} />;
+
     case 'hpChange': {
       const delta = segment.hpDelta || 0;
       const isHeal = segment.isHeal ?? delta > 0;
       const displayText = segment.text || `${delta > 0 ? '+' : ''}${delta}`;
+
       return (
         <span className="text-xs leading-5 whitespace-nowrap">
           {segment.playerName && (
-            <span className="font-medium text-text-primary">{segment.playerName}</span>
+            <span className="font-medium text-text-primary">{segment.playerName === myName ? '我方' : '对手'}</span>
           )}
           <span
             className={`ml-0.5 inline-block rounded-md px-1 py-px font-bold tabular-nums ${
@@ -36,6 +74,7 @@ function SegmentRenderer({ segment }: { segment: ContentSegment }) {
         </span>
       );
     }
+
     default:
       return null;
   }
@@ -45,9 +84,13 @@ function SegmentRenderer({ segment }: { segment: ContentSegment }) {
 function TriggerItem({
   entry,
   duration,
+  isMyTurn,
+  myName
 }: {
   entry: { id: number; segments: ContentSegment[]; createdAt: number };
   duration: number;
+  isMyTurn: boolean;
+  myName: string;
 }) {
   const fadeOutDelay = (duration - 400) / 1000;
   return (
@@ -60,7 +103,7 @@ function TriggerItem({
       {/* 行首小圆点：主题色，呼应 Overlay 的 badge */}
       <span className="h-1 w-1 shrink-0 rounded-full bg-accent-equip/70" />
       {entry.segments.map((seg, i) => (
-        <SegmentRenderer key={i} segment={seg} />
+        <SegmentRenderer key={i} segment={seg} isMyTurn={isMyTurn} myName={myName} />
       ))}
     </div>
   );
@@ -72,7 +115,7 @@ function TriggerItem({
  * rounded-2xl / 细边框 / 毛玻璃 / 顶部发丝高光 / 左侧主题色窄条。
  * 每条提示独立计算存在时间，超时淡化消失，下边的消息平滑跟着补上。
  */
-export default function TriggerEffectPanel() {
+export default function TriggerEffectPanel({ isMyTurn, myName }: Props) {
   const triggers = useTriggerStore((s) => s.triggers);
   const duration = useSettingsStore((s) => s.cardOverlayDuration);
 
@@ -91,7 +134,7 @@ export default function TriggerEffectPanel() {
         className="absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent"
       />
       {triggers.map((entry) => (
-        <TriggerItem key={entry.id} entry={entry} duration={duration} />
+        <TriggerItem key={entry.id} entry={entry} duration={duration} isMyTurn={isMyTurn} myName={myName} />
       ))}
     </div>
   );

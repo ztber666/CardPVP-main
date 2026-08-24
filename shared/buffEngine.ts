@@ -36,9 +36,9 @@ export function applyEffectToPlayer(
   value: number,
   duration: number | undefined,
   sourceCardId: string,
+  state: GameState,
   sourcePlayerId?: string,
   opponent?: PlayerState,
-  state?: GameState,
 ) {
   const stacks = value; // 每次应用效果时，value即为层数/强度
   // 非正数层数/强度时跳过
@@ -46,7 +46,7 @@ export function applyEffectToPlayer(
 
   // 钻石胸甲
   if(player.equipment?.equip?.name === '钻石胸甲' && buffType === BuffType.Shield) {
-    heal(player, player, value, opponent, state);
+    heal(player, player, value, state, opponent);
     showTrigger([
       { type: 'card', cardId: player.equipment.equip.id },
       { type: 'text', text: `${player.name}护盾→血量${value}` },
@@ -88,9 +88,9 @@ export function applyEffectToPlayer(
 // ===== 回合开始处理 =====
 
 /** 回合开始结算事件写入战斗记录（与回合结束 buff 减少消息同位置，type: 'endTurn'） */
-function logSettlementEvent(state: GameState, message: string, segments: ContentSegment[]) {
+function logSettlementEvent(state: GameState, message: string, segments: ContentSegment[], playerId: string) {
   state.log.push({
-    turnNumber: state.turnNumber,
+    playerId: state.players[state.currentTurnIndex].id,
     message,
     segments: [segments],
     type: 'endTurn',
@@ -106,66 +106,66 @@ export function processTurnStartBuffs(player: PlayerState, opponent: PlayerState
   // 1. 自身施加给自己的（自施场景，如 A 对 A 用龙息）
   const selfDamage = getBuffStacks(p, BuffType.Damage, p.id);
   if(selfDamage > 0) {
-    const dealt = damage(p, p, DamageType.Real, selfDamage, false);
+    const dealt = damage(p, p, DamageType.Real, selfDamage, state);
     showTrigger([{ type: 'buff', buffType: BuffType.Damage }], 'all');
     logSettlementEvent(state, `龙息：${p.name}受到${dealt}点魔法伤害`, [
       { type: 'buff', buffType: BuffType.Damage },
       { type: 'hpChange', playerName: p.name, hpDelta: -dealt },
-    ]);
+    ], p.id);
   }
   const selfHorde = getBuffStacks(p, BuffType.Horde, p.id);
   if(selfHorde > 0) {
     // 尸潮是 buff 结算，不是“打出的卡牌”，isCard=false —— 不满足烈焰粉/烈焰棒的“卡牌物理伤害”前提
-    const dealt = damage(p, p, DamageType.Physical, selfHorde, false);
+    const dealt = damage(p, p, DamageType.Physical, selfHorde, state);
     showTrigger([{ type: 'buff', buffType: BuffType.Horde }], 'all');
     logSettlementEvent(state, `尸潮：${p.name}受到${dealt}点物理伤害`, [
       { type: 'buff', buffType: BuffType.Horde },
       { type: 'hpChange', playerName: p.name, hpDelta: -dealt },
-    ]);
+    ], p.id);
   }
   const selfHeal = getBuffStacks(p, BuffType.Heal, p.id);
   if(selfHeal > 0) {
-    const healed = heal(p, p, selfHeal, opponent, state);
+    const healed = heal(p, p, selfHeal, state, opponent);
     showTrigger([{ type: 'buff', buffType: BuffType.Heal }], 'all');
     logSettlementEvent(state, `生命回复：${p.name}回复${healed}点血量`, [
       { type: 'buff', buffType: BuffType.Heal },
       { type: 'hpChange', playerName: p.name, hpDelta: healed, isHeal: true },
-    ]);
+    ], p.id);
   }
 
   // 2. 对方身上由自己施加的（外施场景，如 A 对 B 用龙息）
   const outDamage = getBuffStacks(opponent, BuffType.Damage, p.id);
   if(outDamage > 0) {
-    const dealt = damage(p, opponent, DamageType.Real, outDamage, false);
+    const dealt = damage(p, opponent, DamageType.Real, outDamage, state);
     showTrigger([{ type: 'buff', buffType: BuffType.Damage }], 'all');
     logSettlementEvent(state, `龙息：${opponent.name}受到${dealt}点魔法伤害`, [
       { type: 'buff', buffType: BuffType.Damage },
       { type: 'hpChange', playerName: opponent.name, hpDelta: -dealt },
-    ]);
+    ], p.id);
   }
   const outHorde = getBuffStacks(opponent, BuffType.Horde, p.id);
   if(outHorde > 0) {
     // 同 selfHorde：尸潮是 buff 结算而非卡牌伤害，isCard=false
-    const dealt = damage(p, opponent, DamageType.Physical, outHorde, false);
+    const dealt = damage(p, opponent, DamageType.Physical, outHorde, state);
     showTrigger([{ type: 'buff', buffType: BuffType.Horde }], 'all');
     logSettlementEvent(state, `尸潮：${opponent.name}受到${dealt}点物理伤害`, [
       { type: 'buff', buffType: BuffType.Horde },
       { type: 'hpChange', playerName: opponent.name, hpDelta: -dealt },
-    ]);
+    ], p.id);
   }
   const outHeal = getBuffStacks(opponent, BuffType.Heal, p.id);
   if(outHeal > 0) {
-    const healed = heal(p, opponent, outHeal, p, state);
+    const healed = heal(p, opponent, outHeal, state, p);
     showTrigger([{ type: 'buff', buffType: BuffType.Heal }], 'all');
     logSettlementEvent(state, `生命回复：${opponent.name}回复${healed}点血量`, [
       { type: 'buff', buffType: BuffType.Heal },
       { type: 'hpChange', playerName: opponent.name, hpDelta: healed, isHeal: true },
-    ]);
+    ], p.id);
   }
   
   //钻石胸甲：每回合开始时获得1层抗性
   if(player.equipment?.equip?.name === '钻石胸甲' && player.equipment?.equip?.sourcePlayerId === opponentId) {
-    applyEffectToPlayer(p, BuffType.Resistance, 1, 1, 'card_23', p.id);
+    applyEffectToPlayer(p, BuffType.Resistance, 1, 1, 'card_23', state, p.id);
     showTrigger([
       { type: 'card', cardId: player.equipment.equip.id },
       { type: 'buff', buffType: BuffType.Resistance },
@@ -175,12 +175,12 @@ export function processTurnStartBuffs(player: PlayerState, opponent: PlayerState
       { type: 'card', cardId: player.equipment.equip.id },
       { type: 'buff', buffType: BuffType.Resistance },
       { type: 'text', text: '+1' },
-    ]);
+    ], p.id);
   }
 
   //海龟壳：每回合开始时获得抗火
   if(player.equipment?.equip?.name === '海龟壳' && player.equipment?.equip?.sourcePlayerId === opponentId) {
-    applyEffectToPlayer(p, BuffType.FireResist, 1, 1, 'card_26', p.id);
+    applyEffectToPlayer(p, BuffType.FireResist, 1, 1, 'card_26', state, p.id);
     showTrigger([
       { type: 'card', cardId: player.equipment.equip.id },
       { type: 'buff', buffType: BuffType.FireResist },
@@ -190,12 +190,12 @@ export function processTurnStartBuffs(player: PlayerState, opponent: PlayerState
       { type: 'card', cardId: player.equipment.equip.id },
       { type: 'buff', buffType: BuffType.FireResist },
       { type: 'text', text: '+1' },
-    ]);
+    ], p.id);
   }
 
   //三叉戟：每回合开始时获得1层力量
   if(player.equipment?.weapon?.name === '三叉戟' && player.equipment?.weapon?.sourcePlayerId === opponentId) {
-    applyEffectToPlayer(p, BuffType.Strength, 1, 1, 'card_27', p.id);
+    applyEffectToPlayer(p, BuffType.Strength, 1, 1, 'card_27', state, p.id);
     showTrigger([
       { type: 'card', cardId: player.equipment.weapon.id },
       { type: 'buff', buffType: BuffType.Strength },
@@ -205,7 +205,7 @@ export function processTurnStartBuffs(player: PlayerState, opponent: PlayerState
       { type: 'card', cardId: player.equipment.weapon.id },
       { type: 'buff', buffType: BuffType.Strength },
       { type: 'text', text: '+1' },
-    ]);
+    ], p.id);
   }
 
   return p;

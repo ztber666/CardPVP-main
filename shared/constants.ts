@@ -240,7 +240,7 @@ export const CARDS: CardTemplate[] = [
       activeBuff(BuffType.FireVuln, 2, 2),
       activeBuff(BuffType.Blight, 1, 2),
     ],
-    description: '易燃+2层[*2]（受火焰伤害+2） / 枯萎+1层[*2]（回血时少回1点）',
+    description: '易燃+2层[*2] / 枯萎+1层[*2]',
   },
   {
     id: 'card_15', name: '合金碎片', icon: '5,2', weight: 3, defaultTarget: 'self',
@@ -253,7 +253,7 @@ export const CARDS: CardTemplate[] = [
       activeBuff(BuffType.Block, 5, 2),
        activeBuff(BuffType.Weakness, 1, 2)
       ],
-    description: '目标获得「格挡」[*2]（抵消5点物理伤害，一次性） / 虚弱+1层[*2]',
+    description: '目标获得「格挡」[*2] / 虚弱+1层[*2]',
   },
   {
     id: 'card_16', name: '望远镜', icon: '7,2', weight: 2, defaultTarget: 'opponent',
@@ -280,16 +280,15 @@ export const CARDS: CardTemplate[] = [
     id: 'card_19', name: '蛋糕', icon: '3,1', weight: 4, defaultTarget: 'self',
     costType: CostType.Action,
     effects: [
-      eff(BuffType.IncreaseMaxHp, 2),
-      eff(BuffType.HealAll, 3),
+      eff(BuffType.HealAll, 1),
+      eff(BuffType.HealAll, 1),
       eff(BuffType.Heal, 2),
     ],
     buffs: [
-      activeBuff(BuffType.IncreaseMaxHp, 2),
-      activeBuff(BuffType.HealAll, 3),
+      activeBuff(BuffType.HealAll, 1),
       activeBuff(BuffType.Heal, 2),
     ],
-    description: '目标血量上限+2 / 所有人回3点血 / 目标回2点血',
+    description: '所有人回1点血两次 / 目标回2点血',
   },
   {
     id: 'card_20', name: '潜影盒', icon: '7,2', weight: 3, defaultTarget: 'self',
@@ -310,7 +309,7 @@ export const CARDS: CardTemplate[] = [
     costType: CostType.Strategy,
     effects: [eff(BuffType.DamageOnDiscard, 3, 2)],
     buffs: [activeBuff(BuffType.DamageOnDiscard, 3, 2)],
-    description: '目标获得「绑定诅咒」[*2]（丢弃牌时对其造成3点伤害，每回合1次）',
+    description: '目标获得「绑定诅咒」[*2]',
   },
   {
     id: 'card_22', name: '迷之炖菜', icon: '3,1', weight: 2, defaultTarget: 'self',
@@ -386,7 +385,7 @@ export const CARDS: CardTemplate[] = [
     buffs: [
       activeBuff(BuffType.Poison, 2, 2)
     ],
-    description: '目标获得「中毒」[*2]（回血后受到2点魔法伤害）',
+    description: '目标获得「中毒」[*2]',
   },
   {
     id: 'card_32', name: '侦测器', icon: '5,2', weight: 2, defaultTarget: 'opponent',
@@ -418,7 +417,7 @@ export const CARDS: CardTemplate[] = [
     buffs: [
       activeBuff(BuffType.WitherOnDraw, 1, 1)
     ], 
-    description: '目标获得「陷阱」[*1]（每获得1张牌+1层凋零）',
+    description: '目标获得「陷阱」[*1]',
   },
   {
     id: 'card_36', name: '丛林', icon: '10', weight: 1, defaultTarget: 'self',
@@ -437,7 +436,7 @@ export const CARDS: CardTemplate[] = [
     buffs: [
       activeBuff(BuffType.EnchantBurst, 1, 2)
     ], // 获得1层魔咒爆发，持续2回合
-    description: '获得1层「魔咒爆发」[*2]（丢弃牌能使其生效，获得当回合无法触发，一次性）',
+    description: '获得1层「魔咒爆发」[*2]',
   },
   {
     id: 'card_38', name: '村庄', icon: '10', weight: 1, defaultTarget: 'self',
@@ -511,7 +510,7 @@ export const CARDS: CardTemplate[] = [
       activeBuff(BuffType.AttackSign, 1, 2),
       activeBuff(BuffType.Heal, 1)
     ],
-    description: '目标获得「袭击之兆」[*2]（此状态被移除时场上血量最高的玩家受到5点魔法伤害） / 丢弃此牌时：回1点血',
+    description: '目标获得「袭击之兆」[*2]/ 丢弃此牌时: 回1点血',
   },
   {
     id: 'card_47', name: '红石粉', icon: '7,2', weight: 2, defaultTarget: 'self',

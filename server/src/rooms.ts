@@ -378,7 +378,7 @@ export function handleDebugDrawCard(socketId: string, cardIdInput: string): { su
   const state = deepClone(room.gameState!);
   const idx = state.players.findIndex(p => p.id === roomInfo.playerId);
   if (idx === -1) return { success: false, error: '玩家不存在' };
-  withNotifyRoom(roomInfo.roomId, roomInfo.playerId, () => addCardToHand(state.players[idx], newCard));
+  withNotifyRoom(roomInfo.roomId, roomInfo.playerId, () => addCardToHand(state.players[idx], newCard, state));
   room.gameState = state;
   return { success: true, gameState: state };
 }
