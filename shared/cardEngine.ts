@@ -222,6 +222,19 @@ export function consumeInPlace(player: PlayerState, type: BuffType, amount: numb
   return amount - remaining;
 }
 
+/** 重生：受到致命伤害时触发——抵消此次伤害，移除自身所有状态（含重生自身），血量改为1 */
+function tryRebirth(target: PlayerState, incoming: number): boolean {
+  if (getBuffStacks(target, BuffType.Rebirth) <= 0) return false;
+  if (target.hp - incoming > 0) return false; // 非致命，不触发
+  target.buffs = []; // 移除所有状态（重生自身一并移除）
+  target.hp = 1;
+  showTrigger([
+    { type: 'buff', buffType: BuffType.Rebirth },
+    { type: 'text', text: `${target.name}重生 HP=1` },
+  ], 'all');
+  return true;
+}
+
 export function damage(source: PlayerState, target: PlayerState, type: DamageType, base: number, state: GameState): number {
   let number = Math.max(0, base);
   if(type === DamageType.Physical) {
@@ -345,6 +358,8 @@ export function damage(source: PlayerState, target: PlayerState, type: DamageTyp
  
   } else if(type === DamageType.Real) {
     //真实伤害：无视所有buff
+    //重生：致命伤害时触发（描述未限定伤害类型，真实伤害同样可被重生抵消）
+    if (tryRebirth(target, number)) return number;
     target.hp = Math.max(0, target.hp - number);
     showTrigger([
       { type: 'hpChange', playerName: target.name, hpDelta: -number, isHeal: false },
@@ -353,6 +368,8 @@ export function damage(source: PlayerState, target: PlayerState, type: DamageTyp
   }
 
 
+  //重生：致命伤害时触发（物理/火焰伤害统一出口）
+  if (tryRebirth(target, number)) return number;
   target.hp = Math.max(0, target.hp - number);
 
   showTrigger([
@@ -639,7 +656,9 @@ export function applyCard(
         // 如果有，随机丢弃一张符合条件的牌（这里逻辑为：如果找到了索引，则丢弃该索引对应的牌）
         // 原逻辑也是找到索引后直接丢弃，因为 findIndex 返回的是第一个匹配项，相当于在匹配的牌中随机选了一张
         const [discarded] = target.hand.splice(discardCandidateIdx, 1);
-        handleDiscardBuffs(target, state);
+        // 被动丢弃走完整丢弃链路（重生锚/仙人掌/海洋之心等"丢弃时触发"效果与主动丢弃一致，
+        // 内部已包含 handleDiscardBuffs 的绑定诅咒/下界荒地结算）
+        triggerDiscardEvents(target, discarded, state, isSelfTarget ? state.players[1 - playerIndex] : p);
         if (isSelfTarget) p = target; else t = target;
         msgs.push(`${cardName}使${targetLabel}丢弃了${discarded.name}`);
         showTrigger([
@@ -866,10 +885,13 @@ export function applyCard(
     }
   }
 
-  // 烈焰粉：上一张牌造成物理伤害后打出额外造成火焰伤害（每回合限1次）
-  if (card.name === '烈焰粉' && p.causePhysicalDamageFen && !p.blazePowderUsedThisTurn) {
-    const blazeTarget = isSelfTarget ? p : t;
-    damage(p, blazeTarget, DamageType.Fire, 2, state);
+  // 烈焰粉：自瞄时直接对自己造成3点火焰伤害，不读不写两个标记
+  if (card.name === '烈焰粉' && isSelfTarget) {
+    damage(p, p, DamageType.Fire, 3, state);
+  }
+  // 非自瞄：上一张牌造成物理伤害后打出额外造成火焰伤害（每回合限1次）
+  else if (card.name === '烈焰粉' && p.causePhysicalDamageFen && !p.blazePowderUsedThisTurn) {
+    damage(p, t, DamageType.Fire, 3, state);
     p.causePhysicalDamageFen = false;
     p.blazePowderUsedThisTurn = true;
   }

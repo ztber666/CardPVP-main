@@ -537,6 +537,27 @@ export function triggerDiscardEvents(player: PlayerState, card: CardDef, s: Game
       { type: 'text', text: `${player.name}+2` },
       { type: 'buff', buffType: BuffType.Shield },
     ], 'all');
+  }else if (card.name === '重生锚') {
+    // 重生锚：丢弃时获得重生（持续2回合），抵消下一次致命伤害
+    applyEffectToPlayer(player, BuffType.Rebirth, 1, 2, card.id, s, player.id);
+    if (s) {
+      s.log.push({
+        playerId: s.players[s.currentTurnIndex].id,
+        message: `${player.name}丢弃了重生锚，触发效果获得重生（持续2回合）`,
+        segments: [
+          [{ type: 'text', text: `${player.name}丢弃`, bold: true },
+           { type: 'card', cardId: card.id },
+           { type: 'text', text: '+2回合' },
+           { type: 'buff', buffType: BuffType.Rebirth }],
+        ],
+        timestamp: Date.now(),
+      });
+    }
+    showTrigger([
+      { type: 'card', cardId: card.id },
+      { type: 'text', text: `${player.name}获得重生` },
+      { type: 'buff', buffType: BuffType.Rebirth },
+    ], 'all');
   }
 
   // 烈焰棒：丢弃一张牌可造成2点火焰伤害
