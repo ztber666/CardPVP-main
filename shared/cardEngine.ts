@@ -656,8 +656,9 @@ export function applyCard(
         // 如果有，随机丢弃一张符合条件的牌（这里逻辑为：如果找到了索引，则丢弃该索引对应的牌）
         // 原逻辑也是找到索引后直接丢弃，因为 findIndex 返回的是第一个匹配项，相当于在匹配的牌中随机选了一张
         const [discarded] = target.hand.splice(discardCandidateIdx, 1);
+        target.discardPile.push(discarded);
         // 被动丢弃走完整丢弃链路（重生锚/仙人掌/海洋之心等"丢弃时触发"效果与主动丢弃一致，
-        // 内部已包含 handleDiscardBuffs 的绑定诅咒/下界荒地结算）
+        // 内部已包含 handleDiscardBuffs 的绑定诅咒/下界荒地结算 + 魔咒爆发判定）
         triggerDiscardEvents(target, discarded, state, isSelfTarget ? state.players[1 - playerIndex] : p);
         if (isSelfTarget) p = target; else t = target;
         msgs.push(`${cardName}使${targetLabel}丢弃了${discarded.name}`);

@@ -347,7 +347,7 @@ export const CARDS: CardTemplate[] = [
     costType: CostType.Equip,
     effects: [eff(BuffType.FireResist, 1, 1)],
     buffs: [activeBuff(BuffType.FireResist, 1, 1)],
-    description: '免疫蜘蛛网 / 抗火[*1] / 结束出牌时移除1点凋零',
+    description: '免疫蜘蛛网 / 抗火[*1]',
   },
   {
     id: 'card_27', name: '三叉戟', icon: '9', weight: 1, defaultTarget: 'self',

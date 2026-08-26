@@ -1,6 +1,6 @@
 import { GameState, PlayerState, CardDef, GamePhase, GameLogEntry, PlayCardAction, BuffType, CostType, ContentSegment, BUFF_NAMES } from './types'; 
 import { deepClone, applyEffectToPlayer, getBuffStacks, findBuff } from './buffEngine'; 
-import { drawCards, shuffleDeck, applyCard, damage, DamageType, showMessage, addCardToHand, showTrigger, heal, consumeInPlace } from './cardEngine'; 
+import { drawCards, shuffleDeck, applyCard, damage, DamageType, showMessage, addCardToHand, showTrigger, heal } from './cardEngine';
 import { processTurnStartBuffs, processTurnEndBuffs } from './buffEngine'; 
 import { DEFAULT_MAX_HP, INITIAL_DRAW_COUNT, TURN_DRAW_COUNT, buildTestDeck, CARDS, MAX_LOG_ENTRIES, generateCardInstanceId, DEFAULT_HAND_LIMIT } from './constants'; 
 import { validatePlayCard } from './validation';
@@ -350,32 +350,6 @@ export function endTurn(state: GameState): GameState {
     }
   }
 
-  // 海龟壳：结束出牌时移除1点凋零（装备者自己结束出牌阶段时生效）
-  {
-    const endingPlayer = s.players[endingIdx];
-    if (endingPlayer.equipment?.equip?.name === '海龟壳') {
-      const withered = consumeInPlace(endingPlayer, BuffType.Wither, 1);
-      if (withered > 0) {
-        showTrigger([
-          { type: 'card', cardId: endingPlayer.equipment.equip.id },
-          { type: 'buff', buffType: BuffType.Wither },
-          { type: 'text', text: `${endingPlayer.name}-${withered}` },
-        ], 'all');
-        s.log.push({
-          playerId: s.players[endingIdx].id,
-          message: `海龟壳：${endingPlayer.name}结束出牌时移除了${withered}点凋零`,
-          segments: [
-            [{ type: 'card', cardId: endingPlayer.equipment.equip.id },
-             { type: 'buff', buffType: BuffType.Wither },
-             { type: 'text', text: `-${withered}` }],
-          ],
-          type: 'endTurn',
-          timestamp: Date.now(),
-        });
-      }
-    }
-  }
-
   // 对方回合开始 Buff（endTurn = 对方回合开始）
   // opponentId 是回合开始玩家自己的 ID，用于装备效果判断（sourcePlayerId === opponentId 检查是否自己安装的）
   const opponentIdx = 1 - endingIdx;
@@ -423,7 +397,7 @@ export function handleDiscardBuffs(player: PlayerState, s: GameState) {
       timestamp: Date.now(),
     });
   } 
-  // 下界荒地：丢弃牌时获得1点护盾（每回合限2次）
+  // 下界荒地：丢弃牌时获得1点护盾
   if (player.equipment?.field?.name === '下界荒地') {
     const opp = s?.players.find(p => p.id !== player.id);
     applyEffectToPlayer(player, BuffType.Shield, 1, undefined, player.equipment.field.id, s, player.id, opp);
@@ -469,6 +443,95 @@ export function triggerDrawEvents(player: PlayerState, card: CardDef, s: GameSta
 }
 
 /**
+ * 魔咒爆发：消耗1层使被丢弃的牌效果生效（不消耗打出次数）
+ * 统一入口：主动丢弃（discardFromHand 透传所选目标）与被动丢弃（triggerDiscardEvents：爆牌/刷怪笼/幽匿尖啸体等按默认目标）共用
+ * 采用玻璃板同款递归模式：注入 live 引用后克隆结算，结果原地回写，调用方持有的引用继续有效
+ * @param s 游戏状态（原地更新）
+ * @param player 丢弃者（原地更新）
+ * @param card 被丢弃的牌
+ * @param opponent 丢弃者的对手 live 引用（原地更新；缺省时回写 s.players 对位槽）
+ * @param targetId 主动丢弃时所选目标（缺省时按卡牌 defaultTarget 决定）
+ * @returns 是否触发了魔咒爆发（无可用层时返回 false）
+ */
+export function triggerEnchantBurst(s: GameState, player: PlayerState, card: CardDef, opponent?: PlayerState, targetId?: string): boolean {
+  const enchantStacks = getBuffStacks(player, BuffType.EnchantBurst);
+  if (enchantStacks <= 0 || player.enchantBurstReady <= 0) return false;
+
+  const playerIdx = s.players.findIndex(pl => pl.id === player.id);
+  if (playerIdx === -1) return false;
+  const oppSlot = s.players[1 - playerIdx];
+
+  // 消耗1层魔咒爆发
+  const buff = findBuff(player, BuffType.EnchantBurst);
+  if (buff) {
+    buff.stacks -= 1;
+    if (buff.stacks <= 0) {
+      player.buffs = player.buffs.filter(b => b !== buff);
+    }
+  }
+  player.enchantBurstReady -= 1;
+
+  // 确定目标：主动丢弃透传的 targetId 优先，否则根据卡牌默认目标决定
+  const actualTargetId = targetId
+    ?? (card.defaultTarget === 'self' ? player.id : (opponent?.id ?? oppSlot.id));
+
+  // 保存当前的消耗计数，因为接下来调用 applyCard 会改变它
+  // P0-11：快照必须覆盖 applyCard 会改动的"上一张牌"状态字段，
+  // 否则被丢弃触发的牌会污染 causePhysicalDamage / lastPlayedCardCostType / blazePowderUsedThisTurn
+  const before = {
+    healCount: player.healCountThisTurn,
+    attackCount: player.attackCountThisTurn,
+    actionStrategyCount: player.actionStrategyCountThisTurn,
+    playedTypes: [...player.playedCardTypesThisTurn],
+    lastPlayedDef: [...player.lastPlayedCardDef],
+    lastPlayedSelfTarget: [...(player.lastPlayedCardSelfTarget || [])],
+    lastPlayedName: player.lastPlayedCardName,
+    lastPlayedEffects: [...(player.lastPlayedCardEffects || [])],
+    lastPlayedCostType: player.lastPlayedCardCostType,
+    causePhysicalDamageFen: player.causePhysicalDamageFen,
+    causePhysicalDamageBang: player.causePhysicalDamageBang,
+    blazePowderUsed: player.blazePowderUsedThisTurn,
+  };
+
+  // 玻璃板递归模式：把 live 引用注入克隆再结算，避免丢弃链路中的原地修改在克隆中丢失
+  const newState = deepClone(s);
+  newState.players[playerIdx] = player;
+  if (opponent) newState.players[1 - playerIdx] = opponent;
+  const result = applyCard(newState, player.id, actualTargetId, card);
+
+  // 丢弃触发不算正常打出：恢复消耗计数与"上一张牌"状态
+  const np = result.gameState.players[playerIdx];
+  np.healCountThisTurn = before.healCount;
+  np.attackCountThisTurn = before.attackCount;
+  np.actionStrategyCountThisTurn = before.actionStrategyCount;
+  np.playedCardTypesThisTurn = before.playedTypes;
+  np.lastPlayedCardDef = before.lastPlayedDef;
+  np.lastPlayedCardSelfTarget = before.lastPlayedSelfTarget;
+  np.lastPlayedCardName = before.lastPlayedName;
+  np.lastPlayedCardEffects = before.lastPlayedEffects;
+  np.lastPlayedCardCostType = before.lastPlayedCostType;
+  np.causePhysicalDamageFen = before.causePhysicalDamageFen;
+  np.causePhysicalDamageBang = before.causePhysicalDamageBang;
+  np.blazePowderUsedThisTurn = before.blazePowderUsed;
+
+  // 原地回写（保持对象身份，调用方持有的 player/opponent/s 引用继续有效）
+  Object.assign(player, np);
+  Object.assign(opponent ?? oppSlot, result.gameState.players[1 - playerIdx]);
+  Object.assign(s, result.gameState);
+
+  s.log.push({
+    playerId: s.players[s.currentTurnIndex].id,
+    message: `${player.name}触发了魔咒爆发，使${card.name}生效`,
+    segments: [
+      [{ type: 'text', text: `${player.name}魔咒爆发`, bold: true },
+       { type: 'card', cardId: card.id }],
+    ],
+    timestamp: Date.now(),
+  });
+  return true;
+}
+
+/**
  * 触发卡牌丢弃时的特殊事件（统一接口）
  * 所有"丢弃时触发的特殊卡牌效果"都在此函数内集中处理
  * 新增特殊卡牌的丢弃事件请在此函数内添加
@@ -476,8 +539,9 @@ export function triggerDrawEvents(player: PlayerState, card: CardDef, s: GameSta
  * @param card 被丢弃的卡牌
  * @param s 游戏状态（可选，用于日志记录）
  * @param target 对手玩家（可选，用于烈焰棒等需要指定目标的效果）
+ * @param skipEnchantBurst 跳过魔咒爆发判定（主动丢弃已在 discardFromHand 生效魔咒爆发后回调时传 true，防止同一次丢弃重复消耗层数）
  */
-export function triggerDiscardEvents(player: PlayerState, card: CardDef, s: GameState, target?: PlayerState): void {
+export function triggerDiscardEvents(player: PlayerState, card: CardDef, s: GameState, target?: PlayerState, skipEnchantBurst: boolean = false): void {
   // 仙人掌：丢弃时触发效果，摸1张牌
   if (card.name === '仙人掌') {
     const updated = drawCards(player, 1, s, target);
@@ -582,6 +646,12 @@ export function triggerDiscardEvents(player: PlayerState, card: CardDef, s: Game
   // 全局丢弃buff（绑定诅咒/下界荒地）
   handleDiscardBuffs(player, s);
 
+  //魔咒爆发：丢弃牌时触发魔咒爆发效果（如果有可用层数）
+  //主动丢弃（discardFromHand）与被动丢弃（爆牌/刷怪笼条件丢弃/幽匿尖啸体强制弃牌等）统一走 triggerEnchantBurst
+  if (!skipEnchantBurst && player.hp > 0) {
+    triggerEnchantBurst(s, player, card, target);
+  }
+
   // ===== 未来特殊卡牌的丢弃事件请在此处添加 =====
 }
 
@@ -596,89 +666,21 @@ export function discardFromHand(state: GameState, playerId: string, cardId: stri
   if (cardIdx === -1) return s; 
   const [card] = player.hand.splice(cardIdx, 1); 
 
-  // ===== 新增逻辑：魔咒爆发触发 ===== 
-  const enchantStacks = getBuffStacks(player, BuffType.EnchantBurst);
-  if (enchantStacks > 0 && player.enchantBurstReady > 0) {
-    // 消耗1层魔咒爆发
-    const buff = findBuff(player, BuffType.EnchantBurst);
-    if (buff) {
-      buff.stacks -= 1;
-      if (buff.stacks <= 0) {
-        player.buffs = player.buffs.filter(b => b !== buff);
-      }
-    }
-    player.enchantBurstReady -= 1; 
-
-    // 确定目标：优先用传入的 targetId，否则根据卡牌默认目标决定 
-    const oppId = target.id; 
-    let actualTargetId = targetId; 
-    if (!actualTargetId) { 
-      actualTargetId = card.defaultTarget === 'self' ? player.id : oppId; 
-    } 
-
-    // 保存当前的消耗计数，因为接下来调用 applyCard 会改变它
-    // P0-11：快照必须覆盖 applyCard 会改动的“上一张牌”状态字段，
-    // 否则被丢弃触发的牌会污染 causePhysicalDamage / lastPlayedCardCostType / blazePowderUsedThisTurn
-    const before = { 
-      healCount: player.healCountThisTurn, 
-      attackCount: player.attackCountThisTurn, 
-      actionStrategyCount: player.actionStrategyCountThisTurn, 
-      playedTypes: [...player.playedCardTypesThisTurn], 
-      lastPlayedDef: [...player.lastPlayedCardDef], 
-      lastPlayedSelfTarget: [...(player.lastPlayedCardSelfTarget || [])],
-      lastPlayedName: player.lastPlayedCardName, 
-      lastPlayedEffects: [...(player.lastPlayedCardEffects || [])],
-      lastPlayedCostType: player.lastPlayedCardCostType,
-      causePhysicalDamageFen: player.causePhysicalDamageFen,
-      causePhysicalDamageBang: player.causePhysicalDamageBang,
-      blazePowderUsed: player.blazePowderUsedThisTurn,
-    }; 
-
-    // 执行被丢弃牌的效果 
-    const result = applyCard(s, player.id, actualTargetId, card); 
-    s = result.gameState; 
-
-    // 重新获取 applyCard 更新后的 player 和 target 引用 
-    const pIdx = s.players.findIndex(p => p.id === player.id); 
-    player = s.players[pIdx]; 
-    target = s.players[1 - pIdx]; 
-
-    // 恢复消耗计数（因为这张牌是被丢弃触发的，不算正常打出消耗） 
-    player.healCountThisTurn = before.healCount; 
-    player.attackCountThisTurn = before.attackCount; 
-    player.actionStrategyCountThisTurn = before.actionStrategyCount; 
-    player.playedCardTypesThisTurn = before.playedTypes; 
-    player.lastPlayedCardDef = before.lastPlayedDef; 
-    player.lastPlayedCardSelfTarget = before.lastPlayedSelfTarget;
-    player.lastPlayedCardName = before.lastPlayedName;
-    player.lastPlayedCardEffects = before.lastPlayedEffects;
-    player.lastPlayedCardCostType = before.lastPlayedCostType;
-    player.causePhysicalDamageFen = before.causePhysicalDamageFen;
-    player.causePhysicalDamageBang = before.causePhysicalDamageBang;
-    player.blazePowderUsedThisTurn = before.blazePowderUsed; 
-
-    player.discardPile.push(card); 
+  // ===== 魔咒爆发触发（主动丢弃：透传所选目标 targetId） =====
+  if (triggerEnchantBurst(s, player, card, target, targetId)) {
+    player.discardPile.push(card);
     player.lastDiscardedCardDef.push(card);
 
-    s.log.push({
-      playerId: s.players[s.currentTurnIndex].id,
-      message: `${player.name}触发了魔咒爆发，使${card.name}生效`,
-      segments: [
-        [{ type: 'text', text: `${player.name}魔咒爆发`, bold: true },
-         { type: 'card', cardId: card.id }],
-      ],
-      timestamp: Date.now(),
-    });
-
     // 触发丢弃事件（仙人掌摸牌、烈焰棒、绑定诅咒等）
-    triggerDiscardEvents(player, card, s, target); 
-    s.players[idx] = player; 
-    s.players[1 - idx] = target; 
+    // 魔咒爆发已生效，传 true 跳过 triggerDiscardEvents 内的魔咒爆发判定，防止同一次丢弃重复消耗层数
+    triggerDiscardEvents(player, card, s, target, true);
+    s.players[idx] = player;
+    s.players[1 - idx] = target;
     // P0-4：丢弃链路可能致死（绑定诅咒/烈焰棒/幽匿尖啸体），补统一胜负判定
     checkGameOver(s);
     trimLog(s);
-    return s; // 触发魔咒爆发后直接返回，不走下面的普通丢弃逻辑 
-  } 
+    return s; // 触发魔咒爆发后直接返回，不走下面的普通丢弃逻辑
+  }
   // =================================
 
   player.discardPile.push(card); 
@@ -1037,6 +1039,7 @@ export function surrender(state: GameState, playerId: string): GameState {
   if (idx === -1) return s;
   s.phase = GamePhase.GameOver;
   s.winnerId = s.players[1 - idx].id;
+  showMessage(`${s.players[idx].name}投降了，${s.players[1 - idx].name}获胜！`, 'all');
   s.log.push({
     playerId: s.players[s.currentTurnIndex].id,
     message: `${s.players[idx].name}投降了`,
