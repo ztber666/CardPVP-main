@@ -288,7 +288,7 @@ export const CARDS: CardTemplate[] = [
       activeBuff(BuffType.HealAll, 1),
       activeBuff(BuffType.Heal, 2),
     ],
-    description: '所有人回1点血两次 / 目标回2点血',
+    description: '所有人回2次1点血 / 目标回2点血',
   },
   {
     id: 'card_20', name: '潜影盒', icon: '7,2', weight: 3, defaultTarget: 'self',
@@ -481,9 +481,10 @@ export const CARDS: CardTemplate[] = [
     effects: [eff(BuffType.PhysicalDamage, 3)],
     buffs: [
       activeBuff(BuffType.PhysicalDamage, 3),
-      activeBuff(BuffType.FireDamage, 2)
+      activeBuff(BuffType.FireDamage, 2),
+      activeBuff(BuffType.Rebirth, 2)
     ],
-    description: '3点物理伤害 / 2点火焰伤害',
+    description: '3点物理伤害 / 2点火焰伤害 / 丢弃此牌时：获得「重生」[*2]',
   },
   {
     id: 'card_44', name: '海洋之心', icon: '11,7', weight: 2, defaultTarget: 'self',
@@ -491,7 +492,7 @@ export const CARDS: CardTemplate[] = [
     effects: [],
     buffs: [
       activeBuff(BuffType.Shield, 2),
-      activeBuff(BuffType.FireResist, 1, 1)
+      activeBuff(BuffType.FireResist, 1)
     ],
     description: '受到火焰伤害时失去此牌并抵消此次伤害 / 丢弃此牌时：获得2层护盾',
   },

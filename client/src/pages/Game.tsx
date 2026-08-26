@@ -687,7 +687,8 @@ useEffect(() => {
       {/* ===== 侦测器：猜测权重弹窗 ===== */}
       {showGuessDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" onClick={() => setShowGuessDialog(false)}>
-          <div className="bg-card-bg border border-card-border rounded-2xl p-6 max-w-sm w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+          <div className="relative bg-card-bg border border-card-border rounded-2xl p-6 max-w-sm w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+            <button onClick={(e) => { e.stopPropagation(); setShowCollection(true); }} className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center rounded-lg border border-card-border/60 text-text-secondary hover:bg-card-bg/80 hover:text-text-primary transition-colors text-sm" title="图鉴">📖</button>
             <h3 className="text-lg font-bold text-text-primary mb-2">🔍 侦测器</h3>
             {me?.pendingGuessCardName && <p className="text-sm text-accent-attack font-semibold mb-1">随机选择了一张卡牌</p>}
             <p className="text-sm text-text-secondary mb-4">猜测这张牌在牌组中的权重：</p>
@@ -717,7 +718,8 @@ useEffect(() => {
       {/* ===== 附魔台：选牌弹窗 ===== */}
       {showEnchantDialog && enchantableCards.length > 0 && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" onClick={() => setShowEnchantDialog(false)}>
-          <div className="bg-card-bg border border-card-border rounded-2xl p-6 max-w-sm w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+          <div className="relative bg-card-bg border border-card-border rounded-2xl p-6 max-w-sm w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+            <button onClick={(e) => { e.stopPropagation(); setShowCollection(true); }} className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center rounded-lg border border-card-border/60 text-text-secondary hover:bg-card-bg/80 hover:text-text-primary transition-colors text-sm" title="图鉴">📖</button>
             <h3 className="text-lg font-bold text-text-primary mb-2">⚗️ 附魔台</h3>
             <p className="text-sm text-text-secondary mb-4">选择一张牌丢弃并触发其效果：</p>
             <div className="space-y-2">
@@ -750,7 +752,8 @@ useEffect(() => {
       {/* ===== 蜘蛛网：选择封锁类型弹窗 ===== */}
       {showBucketDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-          <div className="bg-card-bg border border-card-border rounded-2xl p-6 max-w-xs w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+          <div className="relative bg-card-bg border border-card-border rounded-2xl p-6 max-w-xs w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+            <button onClick={(e) => { e.stopPropagation(); setShowCollection(true); }} className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center rounded-lg border border-card-border/60 text-text-secondary hover:bg-card-bg/80 hover:text-text-primary transition-colors text-sm" title="图鉴">📖</button>
             <h3 className="text-lg font-bold text-text-primary mb-2">🪣 蜘蛛网</h3>
             <p className="text-sm text-text-secondary mb-4">选择要封锁的类型：</p>
             <div className="flex gap-3">
@@ -768,7 +771,8 @@ useEffect(() => {
       {/* ===== 诡异钓竿：选择装备弹窗 ===== */}
       {showEquipDialog && opponent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-          <div className="bg-card-bg border border-card-border rounded-2xl p-6 max-w-xs w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+          <div className="relative bg-card-bg border border-card-border rounded-2xl p-6 max-w-xs w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+            <button onClick={(e) => { e.stopPropagation(); setShowCollection(true); }} className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center rounded-lg border border-card-border/60 text-text-secondary hover:bg-card-bg/80 hover:text-text-primary transition-colors text-sm" title="图鉴">📖</button>
             <h3 className="text-lg font-bold text-text-primary mb-2">🎣 诡异钓竿</h3>
             <p className="text-sm text-text-secondary mb-4">选择要丢弃的装备：</p>
             <div className="space-y-2">
@@ -801,7 +805,8 @@ useEffect(() => {
       {/* ===== 红石粉：选择限时状态弹窗 ===== */}
       {showRedstoneDialog && gameState && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-          <div className="bg-card-bg border border-card-border rounded-2xl p-6 max-w-xs w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+          <div className="relative bg-card-bg border border-card-border rounded-2xl p-6 max-w-xs w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+            <button onClick={(e) => { e.stopPropagation(); setShowCollection(true); }} className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center rounded-lg border border-card-border/60 text-text-secondary hover:bg-card-bg/80 hover:text-text-primary transition-colors text-sm" title="图鉴">📖</button>
             <h3 className="text-lg font-bold text-text-primary mb-2">🔴 红石粉</h3>
             <p className="text-sm text-text-secondary mb-4">选择一个限时状态，持续时间+1回合：</p>
             <div className="space-y-2">
@@ -830,8 +835,9 @@ useEffect(() => {
 
             {/* ===== 运输矿车：选牌弹窗 ===== */}
       {showDraftDialog && draftCardsList.length > 0 && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" onClick={() => setShowDraftDialog(false)}>
-          <div className="bg-card-bg border border-card-border rounded-2xl p-6 max-w-sm w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+          <div className="relative bg-card-bg border border-card-border rounded-2xl p-6 max-w-sm w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+            <button onClick={(e) => { e.stopPropagation(); setShowCollection(true); }} className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center rounded-lg border border-card-border/60 text-text-secondary hover:bg-card-bg/80 hover:text-text-primary transition-colors text-sm" title="图鉴">📖</button>
             <h3 className="text-lg font-bold text-text-primary mb-2">🚂 运输矿车</h3>
             <p className="text-sm text-text-secondary mb-4">选择一张牌加入手牌：</p>
             <p className="text-xs text-accent-shield mb-2">{me?.draftPlayerPick === 0 ? "轮到出牌方选牌" : "轮到接受方选牌"}</p>

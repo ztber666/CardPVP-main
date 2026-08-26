@@ -52,6 +52,7 @@ export enum BuffType {
   AttackSign = 'attackSign',     // 袭击之兆
   CopyCard = 'copyCard',           // 复制卡牌(仅用于显示)
   ValidityExtension = 'validityExtension', // 延长时效
+  Rebirth = 'rebirth',           // 重生
 }
 
 // ===== 效果目标 =====
@@ -235,6 +236,7 @@ export const BUFF_NAMES: Record<BuffType, string> = {
   [BuffType.FireDamage]: '火焰伤害',
   [BuffType.CopyCard]: '复制卡牌',
   [BuffType.ValidityExtension]: '延长时效',
+  [BuffType.Rebirth]: '重生',
 };
 
 // ===== 消耗类型名称 =====

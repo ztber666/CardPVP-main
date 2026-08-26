@@ -40,6 +40,7 @@ export const BUFF_DESCRIPTIONS: Record<string, string> = {
   [BuffType.HealPerBuff]: '每有1个状态就回复1点血量。',
   [BuffType.HealAll]: '回复所有玩家的血量。',
   [BuffType.ValidityExtension]: '延长目标1个状态的持续时间。',
+  [BuffType.Rebirth]: '附着对象受到致命伤害时抵消这次伤害，然后移除自身所有状态并将自身血量改为1。',
 };
 
 // Buff 与 BuffType 编号映射
@@ -48,7 +49,7 @@ export const BUFF_ICON_MAP: Record<string, number> = {
   wither: 6, shield: 7, fireResist: 8, poison: 9, fireVuln: 10,
   healBoost: 11, lockAction: 12, lockStrategy: 13, damage: 14,
   witherOnDraw: 15, damageBoost: 16, horde: 17, blight: 18, block: 19,
-  damageOnDiscard: 20, enchantBurst: 21, attackSign: 22,
+  damageOnDiscard: 20, enchantBurst: 21, attackSign: 22, rebirth: 23,
 
   removeWither: 100, reduceDuration: 101, reduceMaxHp: 102, increaseMaxHp: 103,
   conditionalDiscard: 104, physicalDamage: 105, drawCard: 106, stealCard: 107,
