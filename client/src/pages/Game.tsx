@@ -22,6 +22,8 @@ import CollectionModal from '../components/CollectionModal';
 import RulesModal from '../components/RulesModal';
 import { BUFF_ICON_MAP } from '../components/BuffCollection';
 import { useSettingsStore } from '../store/settingsStore';
+import ChoiceDialog from '../components/ChoiceDialog';
+import { useChoiceModal } from '../hooks/useChoiceModal';
 
 export default function Game() {
   const { playCard, endTurn, discardCard, unequipCard, disconnect, guessWeight, draftPick, bucketChoice, equipChoice, cancelEquipChoice, brewChoice, blazeDiscard, debugDrawCard, rematchRequest, rematchAccept, rematchDecline, surrender, redstoneChoice } = useSocket();
@@ -156,6 +158,25 @@ export default function Game() {
     const matchedCount = checkTypes.filter(ct => played.includes(ct)).length;
     const hasEnchantInHand = me.hand.some(c => c.name === '附魔台');
   }, [me, opponent, gameState, isMyTurn, showDraftDialog]);
+
+  // 组件内：
+  const { request, visible, dismiss } = useChoiceModal(gameState, me, opponent, isMyTurn);
+
+  // id → socket 的映射：新增弹窗只需要加一行
+const submitChoice = useCallback(async (key: string) => {
+  if (!request) return;
+  const SUBMITTERS: Record<string, (k: string) => Promise<unknown>> = {
+      guess: k => guessWeight(Number(k)),
+      enchant: k => discardCard(k),
+      draft: k => draftPick(Number(k)),
+      bucket: k => bucketChoice(k as 'action' | 'strategy'),
+      equip: k => equipChoice(k as 'equip' | 'weapon' | 'field'),
+      redstone: k => redstoneChoice(k.split(':')[0], k.split(':')[1] || ''),
+    };
+  setPending(true);
+  await SUBMITTERS[request.id]?.(key);
+  setPending(false);
+}, [request, guessWeight, discardCard, draftPick, bucketChoice, equipChoice, redstoneChoice]);
 
   // 显示提示（3秒自动消失）
   const showToast = useCallback((msg: string) => {
@@ -684,178 +705,16 @@ useEffect(() => {
         </div>
       )}
 
-      {/* ===== 侦测器：猜测权重弹窗 ===== */}
-      {showGuessDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" onClick={() => setShowGuessDialog(false)}>
-          <div className="bg-card-bg border border-card-border rounded-2xl p-6 max-w-sm w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-text-primary mb-2">🔍 侦测器</h3>
-            {me?.pendingGuessCardName && <p className="text-sm text-accent-attack font-semibold mb-1">随机选择了一张卡牌</p>}
-            <p className="text-sm text-text-secondary mb-4">猜测这张牌在牌组中的权重：</p>
-            <input
-              type="number"
-              value={guessInput}
-              onChange={e => setGuessInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleGuessSubmit()}
-              className="w-full bg-card-bg border border-card-border rounded-xl px-4 py-3 text-text-primary text-center text-lg font-bold outline-none focus:border-accent-shield/50 mb-4"
-              placeholder="输入数字"
-              autoFocus
-              min={0}
-              max={50}
-            />
-            <div className="flex gap-2">
-              <button onClick={handleGuessSubmit} className="flex-1 py-2.5 rounded-xl bg-accent-shield/15 border border-accent-shield/25 text-accent-shield font-semibold text-sm hover:bg-accent-shield/25">
-                ✅ 确认
-              </button>
-              <button onClick={() => setShowGuessDialog(false)} className="flex-1 py-2.5 rounded-xl border border-card-border text-text-secondary text-sm hover:bg-card-bg/50">
-                ✕ 取消
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ===== 附魔台：选牌弹窗 ===== */}
-      {showEnchantDialog && enchantableCards.length > 0 && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" onClick={() => setShowEnchantDialog(false)}>
-          <div className="bg-card-bg border border-card-border rounded-2xl p-6 max-w-sm w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-text-primary mb-2">⚗️ 附魔台</h3>
-            <p className="text-sm text-text-secondary mb-4">选择一张牌丢弃并触发其效果：</p>
-            <div className="space-y-2">
-              {enchantableCards.map(card => {
-                return (
-                  <button
-                    key={card.id}
-                    onClick={() => handleEnchantSelect(card.id)}
-                    className="w-full flex items-center gap-3 p-3 rounded-xl border border-card-border hover:border-accent-shield/40 transition-colors hover:bg-card-bg/50 text-left"
-                  >
-                    <img src={getCardImageUrl(card.id)} alt="" className="w-8 h-8 object-contain" style={{ imageRendering: 'pixelated' }} />
-                    <div>
-                      <span className="text-sm font-semibold text-text-primary">{card.name}</span>
-                      <span className="text-xs text-text-secondary ml-2">{COST_TYPE_NAMES[card.costType]}</span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-            <button
-              onClick={() => setShowEnchantDialog(false)}
-              className="w-full mt-4 py-2.5 rounded-xl border border-card-border text-text-secondary text-sm hover:bg-card-bg/50"
-            >
-              取消
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ===== 蜘蛛网：选择封锁类型弹窗 ===== */}
-      {showBucketDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-          <div className="bg-card-bg border border-card-border rounded-2xl p-6 max-w-xs w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-text-primary mb-2">🪣 蜘蛛网</h3>
-            <p className="text-sm text-text-secondary mb-4">选择要封锁的类型：</p>
-            <div className="flex gap-3">
-              <button onClick={() => handleBucketLock('action')} className="flex-1 py-3 rounded-xl bg-accent-attack/15 border border-accent-attack/25 text-accent-attack font-semibold text-sm hover:bg-accent-attack/25">
-                🗡️ 行动牌
-              </button>
-              <button onClick={() => handleBucketLock('strategy')} className="flex-1 py-3 rounded-xl bg-accent-equip/15 border border-accent-equip/25 text-accent-equip font-semibold text-sm hover:bg-accent-equip/25">
-                🎯 锦囊牌
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ===== 诡异钓竿：选择装备弹窗 ===== */}
-      {showEquipDialog && opponent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-          <div className="bg-card-bg border border-card-border rounded-2xl p-6 max-w-xs w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-text-primary mb-2">🎣 诡异钓竿</h3>
-            <p className="text-sm text-text-secondary mb-4">选择要丢弃的装备：</p>
-            <div className="space-y-2">
-              {(['equip', 'weapon', 'field'] as const).map(slot => {
-                const item = opponent.equipment[slot];
-                if (!item) return null;
-                return (
-                  <button key={slot} onClick={() => handleEquipSelect(slot)}
-                    className="w-full flex items-center gap-3 p-3 rounded-xl border border-card-border hover:border-accent-attack/40 transition-colors hover:bg-card-bg/50 text-left"
-                  >
-                    <img src={getCardImageUrl(item.id)} alt="" className="w-8 h-8 object-contain" style={{ imageRendering: 'pixelated' }} />
-                    <div>
-                      <span className="text-sm font-semibold text-text-primary">{item.name}</span>
-                      <span className="text-xs text-text-secondary ml-2">{slot === 'equip' ? '装备' : slot === 'weapon' ? '武器' : '场地'}</span>
-                    </div>
-                  </button>
-                );
-              })}
-              {(!opponent.equipment.equip && !opponent.equipment.weapon && !opponent.equipment.field) && (
-                <p className="text-sm text-text-secondary text-center py-4">目标没有任何装备</p>
-              )}
-            </div>
-            <button onClick={handleEquipCancel} className="w-full mt-4 py-2.5 rounded-xl border border-card-border text-text-secondary text-sm hover:bg-card-bg/50">
-              取消
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ===== 红石粉：选择限时状态弹窗 ===== */}
-      {showRedstoneDialog && gameState && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-          <div className="bg-card-bg border border-card-border rounded-2xl p-6 max-w-xs w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-text-primary mb-2">🔴 红石粉</h3>
-            <p className="text-sm text-text-secondary mb-4">选择一个限时状态，持续时间+1回合：</p>
-            <div className="space-y-2">
-              {(() => {
-                const target = gameState.players.find(pl => pl.id === me?.pendingRedstoneTargetId);
-                const timedBuffs = (target?.buffs || []).filter(b => b.remainingTurns !== undefined);
-                if (timedBuffs.length === 0) {
-                  return <p className="text-sm text-text-secondary text-center py-4">目标没有限时状态</p>;
-                }
-                return timedBuffs.map((buff, idx) => (
-                  <button key={`${buff.buffType}-${buff.sourcePlayerId}-${idx}`} onClick={() => handleRedstoneSelect(buff.buffType, buff.sourcePlayerId)}
-                    className="w-full flex items-center gap-3 p-3 rounded-xl border border-card-border hover:border-accent-equip/40 transition-colors hover:bg-card-bg/50 text-left"
-                  >
-                    <img src={`/assets/buff/buff${BUFF_ICON_MAP[buff.buffType as string]}.png`} alt="" className="w-8 h-8 object-contain" style={{ imageRendering: 'pixelated' }} />
-                    <div>
-                      <span className="text-sm font-semibold text-text-primary">{BUFF_NAMES[buff.buffType as keyof typeof BUFF_NAMES] || buff.buffType}</span>
-                      <span className="text-xs text-text-secondary ml-2">{buff.stacks}层 · 剩余{buff.remainingTurns}回合</span>
-                    </div>
-                  </button>
-                ));
-              })()}
-            </div>
-          </div>
-        </div>
-      )}
-
-            {/* ===== 运输矿车：选牌弹窗 ===== */}
-      {showDraftDialog && draftCardsList.length > 0 && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" onClick={() => setShowDraftDialog(false)}>
-          <div className="bg-card-bg border border-card-border rounded-2xl p-6 max-w-sm w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-text-primary mb-2">🚂 运输矿车</h3>
-            <p className="text-sm text-text-secondary mb-4">选择一张牌加入手牌：</p>
-            <p className="text-xs text-accent-shield mb-2">{me?.draftPlayerPick === 0 ? "轮到出牌方选牌" : "轮到接受方选牌"}</p>
-            <div className="grid grid-cols-2 gap-2">
-              {draftCardsList.map((card, idx) => {
-                const isPicked = me?.draftPickedBy && me.draftPickedBy[idx];
-                const pickerName = isPicked ? me.draftPickedBy[idx] : null;
-                return (
-                  <button
-                    key={idx}
-                    onClick={() => handleDraftSelect(idx)}
-                    disabled={!!isPicked || !((me?.draftPlayerPick === 0 && isMyTurn) || (me?.draftPlayerPick === 1 && !isMyTurn))}
-                    className={'flex flex-col items-center gap-1 p-3 rounded-xl border transition-colors ' + (isPicked ? 'border-gray-300 bg-gray-100 opacity-50 cursor-not-allowed' : 'border-card-border hover:border-accent-shield/40 hover:bg-card-bg/50')}
-                  >
-                    <img src={getCardImageUrl(card.id)} alt="" className="w-10 h-10 object-contain" style={{ imageRendering: 'pixelated' }} />
-                    <span className="text-xs font-semibold text-text-primary text-center">{card.name}</span>
-                    {pickerName && <span className="text-[9px] text-text-secondary">{pickerName} 已选</span>}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* JSX 中（替代原来的 InteractionModal）：*/}
+{visible && (
+  <ChoiceDialog
+    request={visible}
+    onSubmit={submitChoice}
+    onDismiss={dismiss}
+    onCancelServer={async () => { setPending(true); await cancelEquipChoice(); setPending(false); }}
+    busy={pending}
+  />
+)}
 
       {/* ===== 再战邀请弹窗 ===== */}
       {rematchState === 'invited' && (
