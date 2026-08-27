@@ -20,6 +20,7 @@ export interface ChoiceOption {
 export interface ChoiceRequest {
   id: string;             // 'guess' | 'draft' | ... 决定提交走哪个 socket
   triggerKey: string;     // 同一次触发的标识，变化时复位隐藏/输入状态
+  clearSelectionKey?: string; // 变化时自动清除当前选中（运输矿车：对方选牌后我方取消选中），不影响隐藏状态
   icon: string;
   cardId?: string;        // 对应 constants 里卡牌 id，用于解析卡牌图片作为弹窗图标
   title: string;
@@ -69,7 +70,8 @@ export function detectChoice(
   if (me.draftCards?.length) {
     return {
       id: 'draft', triggerKey: me.draftCards.map(c => c.id).join('|'), icon: '🚂', cardId: 'card_41', title: '运输矿车',
-      subtitle: '选择一张牌加入手牌', accent: 'shield', kind: 'select', layout: 'grid',
+      subtitle: '选择一张牌加入手牌', accent: 'shield', kind: 'select',
+      clearSelectionKey: Object.entries(me.draftPickedBy || {}).map(([i, name]) => `${i}:${name}`).join('|'),
       dismissible: false,
       note: me.draftPlayerPick === 0 ? '轮到出牌方选牌' : '轮到接受方选牌',
       options: me.draftCards.map((c, i) => ({

@@ -45,6 +45,12 @@ export default function ChoiceDialog({ request, onSubmit, onDismiss, onCancelSer
     setSelected(null); setDetailKey(null);
   }, [request.triggerKey]);
 
+  // clearSelectionKey 变化（如运输矿车对方选牌）：自动取消选中，但不重置隐藏状态
+  useEffect(() => {
+    setSelected(null);
+    setDetailKey(null);
+  }, [request.clearSelectionKey]);
+
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
   const hide = () => {
@@ -220,8 +226,8 @@ export default function ChoiceDialog({ request, onSubmit, onDismiss, onCancelSer
                     );
                   })}
                 </div>
-                {/* 选中后出现确认按钮 */}
-                {selectedOption && (
+                {/* 选中后出现确认按钮（选中项被禁用时隐藏，如已提交的牌） */}
+                {selectedOption && !selectedOption.disabled && (
                   <button
                     onClick={e => { e.stopPropagation(); onSubmit(selectedOption.key); }}
                     disabled={busy}
