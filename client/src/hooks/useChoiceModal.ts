@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CardDef, CostType, GameState, PlayerState } from '@shared/types';
+import { ActiveBuff, CardDef, CostType, GameState, PlayerState } from '@shared/types';
 import { BUFF_NAMES } from '@shared/types';
 import { getCardImageUrl } from '../utils/cardImage';
 import { BUFF_ICON_MAP } from '../components/BuffCollection';
@@ -13,6 +13,8 @@ export interface ChoiceOption {
   emoji?: string;     // emoji 图标（枚举选项）
   badge?: string;     // "已选"标记（矿车）
   disabled?: boolean;
+  cardId?: string;    // 卡牌选项：选中后详情弹窗（CardDetail）用
+  buff?: ActiveBuff;  // buff 选项：选中后详情弹窗（BuffDetail）用
 }
 
 export interface ChoiceRequest {
@@ -71,7 +73,7 @@ export function detectChoice(
       dismissible: false,
       note: me.draftPlayerPick === 0 ? '轮到出牌方选牌' : '轮到接受方选牌',
       options: me.draftCards.map((c, i) => ({
-        key: String(i), label: c.name, img: getCardImageUrl(c.id),
+        key: String(i), label: c.name, img: getCardImageUrl(c.id), cardId: c.id,
         badge: me.draftPickedBy?.[i],
         disabled: !!me.draftPickedBy?.[i] || ((me.draftPlayerPick === 0) !== isMyTurn),
       })),
@@ -99,6 +101,7 @@ export function detectChoice(
       options: slots.filter(s => opponent.equipment[s]).map(s => ({
         key: s, label: opponent.equipment[s]!.name, sub: tag[s],
         img: getCardImageUrl(opponent.equipment[s]!.id),
+        cardId: opponent.equipment[s]!.id,
       })),
     };
   }
@@ -115,6 +118,7 @@ export function detectChoice(
         label: BUFF_NAMES[b.buffType] || b.buffType,
         sub: `${b.stacks}层 · 剩余${b.remainingTurns}回合`,
         img: `/assets/buff/buff${BUFF_ICON_MAP[b.buffType as string]}.png`,
+        buff: b,
       })),
     };
   }
@@ -127,7 +131,7 @@ export function detectChoice(
         id: 'enchant', triggerKey: `enchant:${gameState.log.length}`, icon: '⚗️', cardId: 'card_37', title: '附魔台',
         subtitle: '选择一张牌丢弃并触发其效果', accent: 'shield', kind: 'select',
         dismissible: true, cancelLabel: '取消', onCancel: 'dismiss',
-        options: cards.map(c => ({ key: c.id, label: c.name, img: getCardImageUrl(c.id) })),
+        options: cards.map(c => ({ key: c.id, label: c.name, img: getCardImageUrl(c.id), cardId: c.id })),
       };
     }
   }

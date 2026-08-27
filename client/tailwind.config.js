@@ -34,7 +34,7 @@ export default {
         },
       },
       animation: {
-        'scale-in': 'scale-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) both',
+        'scale-in': 'scale-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both',
       },
     },
   },
