@@ -613,6 +613,7 @@ useEffect(() => {
         <div className="absolute bottom-full left-0 right-0">
           <PlayerHand
             cards={me.hand}
+            player={me}
             disabled={!isMyTurn || pending}
             selectedCardId={selectedCard?.id ?? null}
             onSelectCard={handleSelectCard}

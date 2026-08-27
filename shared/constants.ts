@@ -191,7 +191,7 @@ export const CARDS: CardTemplate[] = [
     id: 'card_10', name: '刷怪笼', icon: '4,1', weight: 4, defaultTarget: 'opponent',
     costType: CostType.Action,
     effects: [eff(BuffType.ConditionalDiscard, 4)],
-    buffs: [activeBuff(BuffType.ConditionalDiscard, 4)],
+    buffs: [activeBuff(BuffType.Horde, 4, 2)],
     description: '使目标立即丢弃一张攻击卡，否则获得2回合「尸潮」',
   },
 

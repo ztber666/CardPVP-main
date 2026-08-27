@@ -20,6 +20,9 @@ function SegmentRenderer({ segment, isOpponent }: { segment: ContentSegment; myP
       if (isOpponent && displayText?.startsWith('对方')) {
         displayText = '你' + displayText.substring(2);
       }
+      if (isOpponent && displayText?.startsWith('自己')) {
+        displayText = '对方' + displayText.substring(2);
+      }
       return (
         <span className={`text-[13px] leading-relaxed ${segment.bold ? 'font-semibold text-text-primary' : 'text-text-secondary/90'}`}>
           {displayText}

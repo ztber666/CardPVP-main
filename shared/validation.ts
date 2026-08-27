@@ -1,4 +1,4 @@
-import { GameState, GamePhase, CostType, BuffType, PlayCardAction } from './types';
+import { GameState, GamePhase, CostType, BuffType, PlayCardAction, PlayerState, CardDef } from './types';
 import { getCardSubtype, getLastNonGlassCard } from './constants';
 
 /**
@@ -89,6 +89,41 @@ export function validatePlayCard(
   }
 
   return { valid: true };
+}
+
+/**
+ * 卡牌是否因“消耗类型次数已用尽”而无法打出（与 validatePlayCard 的消耗校验保持一致）。
+ * 计算口径与 ConsumptionCounter 相同：回血/攻击各 1 次/回合，行动+锦囊共享 5+加成 次/回合；
+ * 冰原场地使回血/攻击次数互通，玻璃板复制行动牌需额外 2 次。
+ * 供客户端手牌置灰显示使用。
+ */
+export function isCardConsumptionExhausted(player: PlayerState, card: CardDef): boolean {
+  const poolLimit = 5 + (player.actionLimitBonus || 0);
+  const poolUsed = player.actionStrategyCountThisTurn || 0;
+
+  // 玻璃板：复制“行动牌”需额外消耗 2 次（含自身共 3 次）；复制其它类型只消耗 1 次
+  if (card.name === '玻璃板') {
+    const lastCard = getLastNonGlassCard(player);
+    const need = lastCard?.costType === CostType.Action ? 3 : 1;
+    if (poolLimit - poolUsed < need) return true;
+  }
+
+  // 所有行动牌（含回血/攻击类）+ 锦囊牌 → 共享池
+  if (card.costType === CostType.Action || card.costType === CostType.Strategy) {
+    if (poolUsed >= poolLimit) return true;
+  }
+
+  // 回血类/攻击类：各 1 张/回合（冰原场地使两类次数互通）
+  const subtype = getCardSubtype(card);
+  const fieldIce = player.equipment?.field?.name === '冰原';
+  if (subtype === 'heal' && (player.healCountThisTurn || 0) >= 1 && !(fieldIce && (player.attackCountThisTurn || 0) < 1)) {
+    return true;
+  }
+  if (subtype === 'attack' && (player.attackCountThisTurn || 0) >= 1 && !(fieldIce && (player.healCountThisTurn || 0) < 1)) {
+    return true;
+  }
+
+  return false;
 }
 
 /**
