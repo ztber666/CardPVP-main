@@ -241,6 +241,16 @@ export function useSocket() {
     });
   }, []);
 
+  // 刷怪笼：选择丢弃攻击卡或不丢（获尸潮）
+  const spawnerChoice = useCallback((action: 'discard' | 'skip', cardId?: string): Promise<{ success: boolean; error?: string }> => {
+    return new Promise((resolve) => {
+      const socket = getSocket();
+      socket.emit('spawner_choice', { action, cardId }, (response: { success: boolean; error?: string }) => {
+        resolve(response);
+      });
+    });
+  }, []);
+
   // 再战
   const rematchRequest = useCallback((): Promise<{ success: boolean; error?: string }> => {
     return new Promise((resolve) => {
@@ -460,5 +470,6 @@ export function useSocket() {
     rematchDecline,
     surrender,
     redstoneChoice, // ===== 新增 =====
+    spawnerChoice, // ===== 新增 =====
   };
 }

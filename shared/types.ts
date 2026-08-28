@@ -135,6 +135,11 @@ export interface PlayerState {
   pendingEquipCard?: CardDef;        // 诡异钓竿：打出的卡牌（取消时返还）
   pendingRedstoneChoice: string;     // 红石粉：待选限时状态
   pendingRedstoneTargetId: string;   // 红石粉：目标玩家 ID
+  pendingSpawnerChoice?: {           // 刷怪笼：待目标选择丢弃（undefined=无挂起）
+    cardIds: string[];               // 可丢弃的攻击卡实例 id（打出时快照）
+    sourcePlayerId: string;          // 刷怪笼打出者
+    sourceCardId: string;            // 刷怪笼卡牌实例 id
+  };
 }
 
 // ===== 游戏阶段 =====

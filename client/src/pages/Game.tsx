@@ -26,7 +26,7 @@ import ChoiceDialog from '../components/ChoiceDialog';
 import { useChoiceModal } from '../hooks/useChoiceModal';
 
 export default function Game() {
-  const { playCard, endTurn, discardCard, unequipCard, disconnect, guessWeight, draftPick, bucketChoice, equipChoice, cancelEquipChoice, brewChoice, blazeDiscard, debugDrawCard, rematchRequest, rematchAccept, rematchDecline, surrender, redstoneChoice } = useSocket();
+  const { playCard, endTurn, discardCard, unequipCard, disconnect, guessWeight, draftPick, bucketChoice, equipChoice, cancelEquipChoice, brewChoice, blazeDiscard, debugDrawCard, rematchRequest, rematchAccept, rematchDecline, surrender, redstoneChoice, spawnerChoice } = useSocket();
   const { gameState, player, isMyTurn, rematchState, rematchRequesterName, opponentDisconnected } = useGameStore();
   const cardOverlayDuration = useSettingsStore((s) => s.cardOverlayDuration);
 
@@ -172,11 +172,12 @@ const submitChoice = useCallback(async (key: string) => {
       bucket: k => bucketChoice(k as 'action' | 'strategy'),
       equip: k => equipChoice(k as 'equip' | 'weapon' | 'field'),
       redstone: k => redstoneChoice(k.split(':')[0], k.split(':')[1] || ''),
+      spawner: k => k === 'skip' ? spawnerChoice('skip') : spawnerChoice('discard', k.split(':')[1]),
     };
   setPending(true);
   await SUBMITTERS[request.id]?.(key);
   setPending(false);
-}, [request, guessWeight, discardCard, draftPick, bucketChoice, equipChoice, redstoneChoice]);
+}, [request, guessWeight, discardCard, draftPick, bucketChoice, equipChoice, redstoneChoice, spawnerChoice]);
 
   // 显示提示（3秒自动消失）
   const showToast = useCallback((msg: string) => {
@@ -715,6 +716,24 @@ useEffect(() => {
     busy={pending}
   />
 )}
+
+      {/* ===== 刷怪笼：打出者等待对手选择（自瞄时目标即自己，不会进入此弹窗） ===== */}
+      {opponent?.pendingSpawnerChoice && opponent.pendingSpawnerChoice.sourcePlayerId === player?.id && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" onClick={e => e.stopPropagation()}>
+          <div className="w-full max-w-sm mx-4 rounded-2xl border border-accent-attack/40 bg-card-bg p-5 shadow-xl text-center">
+            <div className="flex items-center justify-center gap-2">
+              <span className="text-xl">🧟</span>
+              <h3 className="text-base font-semibold text-text-primary">刷怪笼</h3>
+            </div>
+            <div className="mt-3 flex items-center justify-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-accent-attack animate-pulse" />
+              <span className="w-1.5 h-1.5 rounded-full bg-accent-attack animate-pulse [animation-delay:200ms]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-accent-attack animate-pulse [animation-delay:400ms]" />
+            </div>
+            <p className="mt-2 text-sm text-text-secondary">等待对手选择是否丢弃攻击卡…</p>
+          </div>
+        </div>
+      )}
 
       {/* ===== 再战邀请弹窗 ===== */}
       {rematchState === 'invited' && (

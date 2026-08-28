@@ -24,6 +24,7 @@ import {
   handleRedstoneChoiceAction,
   handleEquipChoiceAction,
   handleCancelEquipChoiceAction,
+  handleSpawnerChoiceAction,
   handleBrewConversionAction,
   handleDebugDrawCard,
   handleRematchRequest,
@@ -394,6 +395,25 @@ io.on('connection', (socket) => {
     }
   });
 
+  // ===== 刷怪笼：选择丢弃攻击卡或不丢（获尸潮） =====
+  socket.on('spawner_choice', ({ action, cardId }: { action: string; cardId?: string }, callback) => {
+    const result = handleSpawnerChoiceAction(socket.id, action, cardId);
+    if (result.success && result.gameState) {
+      const roomInfo = getRoomBySocketId(socket.id);
+      if (roomInfo) {
+        const room = getRoom(roomInfo.roomId);
+        if (room) {
+          for (const player of room.players) {
+            io.to(player.socketId).emit('state_update', filterStateForPlayer(result.gameState, player.id));
+          }
+        }
+      }
+      callback({ success: true });
+    } else {
+      callback({ success: false, error: result.error });
+    }
+  });
+
   // ===== 酿造台：选择转化方向 =====
   socket.on('brew_choice', ({ cardId }: { cardId: string }, callback) => {
     const result = handleBrewConversionAction(socket.id, cardId);
@@ -606,6 +626,10 @@ function filterStateForPlayer(state: any, playerId: string): any {
       p.hand = p.hand.map(() => ({ hidden: true }));
       p.deck = [];
       p.draftPickCount = undefined;
+      // 刷怪笼：对手视角脱敏候选卡 id（不泄露对方手牌构成），保留存在性供等待弹窗检测
+      if (p.pendingSpawnerChoice) {
+        p.pendingSpawnerChoice = { ...p.pendingSpawnerChoice, cardIds: [] };
+      }
     } else {
       if (draftInfo) {
         p.draftCards = draftInfo.draftCards;
