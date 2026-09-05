@@ -1,6 +1,6 @@
 import { GameState, PlayerState, CardDef, GamePhase, GameLogEntry, PlayCardAction, BuffType, CostType, ContentSegment, BUFF_NAMES } from './types'; 
 import { deepClone, applyEffectToPlayer, getBuffStacks, findBuff } from './buffEngine'; 
-import { drawCards, shuffleDeck, applyCard, damage, DamageType, showMessage, addCardToHand, showTrigger, heal } from './cardEngine';
+import { drawCards, shuffleDeck, applyCard, damage, DamageType, showMessage, addCardToHand, showTrigger, heal, handleHandLimit } from './cardEngine';
 import { processTurnStartBuffs, processTurnEndBuffs } from './buffEngine'; 
 import { DEFAULT_MAX_HP, INITIAL_DRAW_COUNT, TURN_DRAW_COUNT, buildTestDeck, CARDS, MAX_LOG_ENTRIES, generateCardInstanceId, DEFAULT_HAND_LIMIT } from './constants'; 
 import { validatePlayCard } from './validation';
@@ -376,6 +376,10 @@ export function endTurn(state: GameState): GameState {
   return s; 
 } 
 
+export function findOpponent(state: GameState, playerId: string): PlayerState {
+  return state.players.find(p => p.id !== playerId)!;
+}
+
 export function handleDiscardBuffs(player: PlayerState, s: GameState) { 
   // 绑定诅咒：丢弃牌时受伤害 
   const curseStack = getBuffStacks(player, BuffType.DamageOnDiscard); 
@@ -537,11 +541,11 @@ export function triggerEnchantBurst(s: GameState, player: PlayerState, card: Car
  * 新增特殊卡牌的丢弃事件请在此函数内添加
  * @param player 丢弃牌的玩家
  * @param card 被丢弃的卡牌
- * @param s 游戏状态（可选，用于日志记录）
- * @param target 对手玩家（可选，用于烈焰棒等需要指定目标的效果）
+ * @param s 游戏状态（用于日志记录）
  * @param skipEnchantBurst 跳过魔咒爆发判定（主动丢弃已在 discardFromHand 生效魔咒爆发后回调时传 true，防止同一次丢弃重复消耗层数）
  */
-export function triggerDiscardEvents(player: PlayerState, card: CardDef, s: GameState, target?: PlayerState, skipEnchantBurst: boolean = false): void {
+export function triggerDiscardEvents(player: PlayerState, card: CardDef, s: GameState, skipEnchantBurst: boolean = false): void {
+  const target = findOpponent(s, player.id);
   // 仙人掌：丢弃时触发效果，摸1张牌
   if (card.name === '仙人掌') {
     const updated = drawCards(player, 1, s, target);
@@ -673,7 +677,7 @@ export function discardFromHand(state: GameState, playerId: string, cardId: stri
 
     // 触发丢弃事件（仙人掌摸牌、烈焰棒、绑定诅咒等）
     // 魔咒爆发已生效，传 true 跳过 triggerDiscardEvents 内的魔咒爆发判定，防止同一次丢弃重复消耗层数
-    triggerDiscardEvents(player, card, s, target, true);
+    triggerDiscardEvents(player, card, s, true);
     s.players[idx] = player;
     s.players[1 - idx] = target;
     // P0-4：丢弃链路可能致死（绑定诅咒/烈焰棒/幽匿尖啸体），补统一胜负判定
@@ -687,16 +691,17 @@ export function discardFromHand(state: GameState, playerId: string, cardId: stri
   player.lastDiscardedCardDef.push(card);
 
   // 触发丢弃事件（仙人掌摸牌、烈焰棒、绑定诅咒等）
-  triggerDiscardEvents(player, card, s, target); 
+  triggerDiscardEvents(player, card, s); 
   s.players[idx] = player; 
   s.players[1 - idx] = target; 
+  const segments: ContentSegment[] = 
+    [{ type: 'text', text: `${player.name}丢弃了`, bold: true },
+     { type: 'card', cardId: card.id }];
+  showTrigger(segments, 'all'); //触发提示消息
   s.log.push({
     playerId: s.players[s.currentTurnIndex].id,
     message: `${player.name}丢弃了${card.name}`,
-    segments: [
-      [{ type: 'text', text: `${player.name}丢弃`, bold: true },
-       { type: 'card', cardId: card.id }],
-    ],
+    segments: [segments],
     timestamp: Date.now(),
   });
   // P0-4：同上，普通丢弃链路也可能致死
@@ -718,40 +723,19 @@ export function unequipCard(state: GameState, playerId: string, slot: string): G
   let player = s.players[idx]; 
   const card = player.equipment[slot as keyof typeof player.equipment]; 
   if (!card) return s; 
-  const handLimit = DEFAULT_HAND_LIMIT + (player.handLimitBonus || 0);
-  const equippedCount = [player.equipment.equip, player.equipment.weapon, player.equipment.field].filter(Boolean).length;
-  if (card.name === '村庄') {
-    // 村庄卸下时需要清除手牌上限加成
-    player.handLimitBonus = 0;
-    if (player.hand.length + equippedCount >= handLimit) {
-      // 超出手牌上限的部分直接丢弃（进入弃牌堆），触发丢弃事件
-      const excessCount = player.hand.length + equippedCount - handLimit;
-      const excessCards = player.hand.splice(-excessCount, excessCount);
-      s.log.push({
-        playerId: s.players[s.currentTurnIndex].id,
-        message: `${player.name}卸下村庄，手牌超出上限${excessCount}张`,
-        segments: [
-          [{ type: 'text', text: `${player.name}卸下村庄`, bold: true },
-           { type: 'text', text: `手牌超出上限${excessCount}张` }],
-        ],
-        timestamp: Date.now(),
-      });
-      for (const excessCard of excessCards) {
-        discardFromHand(s, player.id, excessCard.id);
-      }
-    }
-  }
-
   delete player.equipment[slot as keyof typeof player.equipment]; 
-  // 装备卸下时直接丢弃（进入弃牌堆），触发丢弃事件 
-  player.discardPile.push(card); 
-  handleDiscardBuffs(player, s); 
+  triggerDiscardEvents(player, card, s);
   s.players[idx] = player; 
   s.log.push({ 
     playerId: s.players[s.currentTurnIndex].id,
     message: `${player.name}卸下了${card.name}`, 
     timestamp: Date.now(), 
   }); 
+
+  if (card.name === '村庄') {
+    handleHandLimit(player, s, undefined);
+  }
+
   // P0-4：卸装丢弃可能触发绑定诅咒致死
   checkGameOver(s);
   trimLog(s);

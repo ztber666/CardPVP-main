@@ -13,7 +13,7 @@
 7 verbose unsafe-perm in lifecycle true
 8 info card-pvp@ Failed to exec dev:client script
 9 verbose stack Error: card-pvp@ dev:client: `cd client && npm run dev`
-9 verbose stack Exit status 1
+9 verbose stack Exit status 3221225786
 9 verbose stack     at EventEmitter.<anonymous> (C:\Users\Dunzi\node_modules\npm\lib\utils\lifecycle.js:217:16)
 9 verbose stack     at EventEmitter.emit (node:events:509:28)
 9 verbose stack     at ChildProcess.<anonymous> (C:\Users\Dunzi\node_modules\npm\lib\utils\spawn.js:24:14)
@@ -21,14 +21,14 @@
 9 verbose stack     at maybeClose (node:internal/child_process:1141:16)
 9 verbose stack     at ChildProcess._handle.onexit (node:internal/child_process:306:5)
 10 verbose pkgid card-pvp@
-11 verbose cwd C:\Users\Dunzi\Desktop\CardPVP-Ender
+11 verbose cwd C:\Users\Dunzi\Desktop\CardPVP-main
 12 error Windows_NT 10.0.19045
 13 error argv "D:\\appdate\\Nodejs\\node.exe" "C:\\Users\\Dunzi\\node_modules\\npm\\bin\\npm-cli.js" "run" "dev:client"
 14 error node v24.19.0
 15 error npm  v2.15.12
 16 error code ELIFECYCLE
 17 error card-pvp@ dev:client: `cd client && npm run dev`
-17 error Exit status 1
+17 error Exit status 3221225786
 18 error Failed at the card-pvp@ dev:client script 'cd client && npm run dev'.
 18 error This is most likely a problem with the card-pvp package,
 18 error not with npm itself.

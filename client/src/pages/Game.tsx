@@ -24,6 +24,7 @@ import { BUFF_ICON_MAP } from '../components/BuffCollection';
 import { useSettingsStore } from '../store/settingsStore';
 import ChoiceDialog from '../components/ChoiceDialog';
 import { useChoiceModal } from '../hooks/useChoiceModal';
+import SettingsModal from '../components/SettingsModal';
 
 export default function Game() {
   const { playCard, endTurn, discardCard, unequipCard, disconnect, guessWeight, draftPick, bucketChoice, equipChoice, cancelEquipChoice, brewChoice, blazeDiscard, debugDrawCard, rematchRequest, rematchAccept, rematchDecline, surrender, redstoneChoice } = useSocket();
@@ -37,6 +38,7 @@ export default function Game() {
   const [showOptions, setShowOptions] = useState(false);
   const [showCollection, setShowCollection] = useState(false);
   const [showRules, setShowRules] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [handCollapsed, setHandCollapsed] = useState(false);
   const [recentPlayedCard, setRecentPlayedCard] = useState<{ card: CardDef; playerName: string; key: number; variant: 'self' | 'opponent' | 'discard'; fromOpponent: boolean } | null>(null);
   const playedCardTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -348,6 +350,8 @@ useEffect(() => {
   // 回大厅
   const handleBackToLobby = useCallback(() => {
     disconnect();
+    // 主动离开：清掉断线重连存档，避免 reload 后 connect 读到残留 gamePlayer 自动 rejoin 回旧房间
+    localStorage.removeItem('gamePlayer');
     window.location.reload();
   }, [disconnect]);
 
@@ -772,6 +776,15 @@ useEffect(() => {
                 📋 规则
               </button>
               <button
+                onClick={() => {
+                  setShowOptions(false);
+                  setShowSettings(true);
+                }}
+                className="w-full py-3 rounded-xl border border-card-border text-text-secondary text-sm font-medium hover:bg-card-bg/50 transition-colors"
+              >
+                ⚙️ 设置
+              </button>
+              <button
                 onClick={async () => {
                   setShowOptions(false);
                   await surrender();
@@ -793,6 +806,11 @@ useEffect(() => {
       {/* ===== 规则弹窗 ===== */}
       {showRules && (
         <RulesModal onClose={() => setShowRules(false)} />
+      )}
+
+      {/* ===== 设置弹窗 ===== */}
+      {showSettings && (
+        <SettingsModal onClose={() => setShowSettings(false)} />
       )}
     </div>
   );

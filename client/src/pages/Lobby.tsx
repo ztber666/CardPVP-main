@@ -3,12 +3,14 @@ import { useGameStore } from '../store/gameStore';
 import { useIsLandscape } from '../hooks/useOrientation';
 import CollectionModal from '../components/CollectionModal';
 import RulesModal from '../components/RulesModal';
+import SettingsModal from '../components/SettingsModal';
 
 export default function Lobby() {
   const { connected } = useGameStore();
   const isLandscape = useIsLandscape();
   const [showCollection, setShowCollection] = useState(false);
   const [showRules, setShowRules] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   const handleStart = () => {
     useGameStore.getState().setPage('roomList');
@@ -48,6 +50,12 @@ export default function Lobby() {
       >
         📖 图鉴
       </button>
+      <button
+        onClick={() => setShowSettings(true)}
+        className={`${btnBase} bg-card-bg border-2 border-card-border text-text-primary hover:border-accent-shield/30 hover:bg-card-bg/80`}
+      >
+        ⚙️ 设置
+      </button>
     </div>
   );
 
@@ -71,6 +79,9 @@ export default function Lobby() {
       )}
       {showRules && (
         <RulesModal onClose={() => setShowRules(false)} />
+      )}
+      {showSettings && (
+        <SettingsModal onClose={() => setShowSettings(false)} />
       )}
     </div>
   );

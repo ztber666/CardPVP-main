@@ -55,14 +55,14 @@ export function useSocket() {
 
   // 修改 createRoom 和 joinRoom，保存数据到本地存储
   const createRoom = useCallback(
-    (playerName: string): Promise<{ roomId: string; playerId: string }> => {
+    (playerName: string): Promise<{ roomId: string; playerId: string; token: string }> => {
       return new Promise((resolve, reject) => {
         const socket = getSocket();
-        socket.emit('create_room', playerName, (response: { roomId: string; playerId: string }) => {
+        socket.emit('create_room', playerName, (response: { roomId: string; playerId: string; token: string }) => {
           if (response.roomId) {
-            // 新增：保存到本地存储
-            localStorage.setItem('gamePlayer', JSON.stringify({ id: response.playerId, name: playerName, roomId: response.roomId }));
-            setPlayer({ id: response.playerId, name: playerName, roomId: response.roomId });
+            // 新增：保存到本地存储（含会话令牌，用于 rejoin 身份校验）
+            localStorage.setItem('gamePlayer', JSON.stringify({ id: response.playerId, name: playerName, roomId: response.roomId, token: response.token }));
+            setPlayer({ id: response.playerId, name: playerName, roomId: response.roomId, token: response.token });
             setWaitingForOpponent(true);
             resolve(response);
           } else {
@@ -76,14 +76,14 @@ export function useSocket() {
 
   // 加入房间
   const joinRoom = useCallback(
-    (roomId: string, playerName: string, verifyName?: string): Promise<{ success: boolean; playerId?: string; error?: string }> => {
+    (roomId: string, playerName: string, verifyName?: string): Promise<{ success: boolean; playerId?: string; token?: string; error?: string }> => {
       return new Promise((resolve) => {
         const socket = getSocket();
-        socket.emit('join_room', { roomId, playerName, verifyName }, (response: { success: boolean; playerId?: string; error?: string }) => {
+        socket.emit('join_room', { roomId, playerName, verifyName }, (response: { success: boolean; playerId?: string; token?: string; error?: string }) => {
           if (response.success && response.playerId) {
-            // 新增：保存到本地存储
-            localStorage.setItem('gamePlayer', JSON.stringify({ id: response.playerId, name: playerName, roomId: roomId }));
-            setPlayer({ id: response.playerId, name: playerName, roomId });
+            // 新增：保存到本地存储（含会话令牌，用于 rejoin 身份校验）
+            localStorage.setItem('gamePlayer', JSON.stringify({ id: response.playerId, name: playerName, roomId: roomId, token: response.token }));
+            setPlayer({ id: response.playerId, name: playerName, roomId, token: response.token });
             resolve(response);
           } else {
             resolve(response);
@@ -307,21 +307,27 @@ export function useSocket() {
       console.log('[Socket] 已连接');
       setConnected(true);
 
+      // 注：即使是 socket.io 原生会话恢复（socket.recovered），也仍走 rejoin。
+      // rejoin 幂等：服务端恢复分支会重挂业务映射并同步状态；同时 rejoin 兜底覆盖
+      // “会话已恢复但房间已不存在”的情况——此时 rejoin 失败会自动回大厅，避免卡死。
       // 新增：自动重连逻辑
       const savedPlayer = localStorage.getItem('gamePlayer');
       if (savedPlayer) {
         try {
-          const { playerId, roomId, name } = JSON.parse(savedPlayer);
-          console.log('[Socket] 检测到断线记录，尝试重连...', playerId);
-          socket.emit('rejoin', { playerId, roomId }, (res: any) => {
+          // localStorage 键名为 id（与 store 的 player.id 一致），而非 playerId
+          const { id, roomId, name, token } = JSON.parse(savedPlayer);
+          console.log('[Socket] 检测到断线记录，尝试重连...', id);
+          socket.emit('rejoin', { playerId: id, roomId, token }, (res: any) => {
             if (res.success) {
               console.log('[Socket] 重连成功');
-              setPlayer({ id: playerId, name, roomId });
+              setPlayer({ id, name, roomId, token });
               // 不在此处设置 gameState — 等待 state_update 事件发送过滤后的状态
             } else {
               console.log('[Socket] 重连失败，房间可能已解散', res.error);
               localStorage.removeItem('gamePlayer'); // 清理无效数据
-              // 可选：在这里提示用户房间失效
+              // 【兜底】避免卡在过期 gameState 页面：清空状态并回大厅
+              reset();
+              useGameStore.getState().setPage('lobby');
             }
           });
         } catch (e) {
@@ -336,12 +342,17 @@ export function useSocket() {
       setConnected(false);
     });
 
-    socket.on('player_joined', (data: { playerCount: number }) => {
+    socket.on('player_joined', (data: { playerCount: number; playerId?: string }) => {
       console.log('[Socket] 有玩家加入', data);
       setWaitingForOpponent(false);
       // 【新增】如果人齐了（2人），说明对手在线，清除断线标记
       if (data.playerCount === 2) {
         useGameStore.getState().setOpponentDisconnected(false);
+        // 加入/重连者不是自己 → 说明是对手进入房间，提示"对手已连接"
+        const me = useGameStore.getState().player;
+        if (data.playerId && me && data.playerId !== me.id) {
+          displayMessage('对手已连接');
+        }
       }
     });
 

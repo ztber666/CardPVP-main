@@ -5,7 +5,7 @@ import {
 } from './types';
 import { deepClone, applyEffectToPlayer, getBuffStacks, findBuff } from './buffEngine';
 import { DEFAULT_HAND_LIMIT, generateCardInstanceId, getCardSubtype, getLastNonGlassCard, MAX_LOG_ENTRIES } from './constants';
-import { handleDiscardBuffs, triggerDiscardEvents, triggerDrawEvents } from './gameEngine';
+import { discardFromHand, findOpponent, triggerDiscardEvents, triggerDrawEvents } from './gameEngine';
 
 // 服务端通知 handler（由 server/index.ts 设置，通过 globalThis 跨模块共享）
 // target: 'all'=双方都显示 'self'=仅出牌者 'opponent'=仅对手
@@ -56,28 +56,42 @@ export function showTrigger(segments: ContentSegment[], target: 'all' | 'self' |
 
 //将卡牌添加到手牌
 export function addCardToHand(player: PlayerState, card: CardDef, s: GameState, target?: PlayerState) {
-  const handLimit = DEFAULT_HAND_LIMIT + (player.handLimitBonus || 0);
-  const equippedCount = [player.equipment.equip, player.equipment.weapon, player.equipment.field].filter(Boolean).length;
-  // 4. 手牌上限判断
-  if (player.hand.length + equippedCount >= handLimit) {
-    // 手牌已达上限：先加入手牌，再走完整丢弃流程（弃牌堆 + triggerDiscardEvents）
     player.hand.push(card);
-    player.discardPile.push(card);
-    showTrigger([
-      { type: 'text', text: `${player.name}爆牌` },
-      { type: 'card', cardId: card.id },
-    ], 'all');
-    triggerDiscardEvents(player, card, s, target);
-
-    // 从手牌移除
-    player.hand = player.hand.filter(c => c.id !== card.id);
-  } else {
-    // 正常加入手牌
-    player.hand.push(card);
-  }
-
+    handleHandLimit(player, s, target);
 }
 
+/**
+ * 处理手牌上限（爆牌）
+ * 当手牌数量 + 装备区数量超过手牌上限时，弃掉多余的手牌。
+ * 优先弃掉最后加入手牌的牌（即数组末尾的牌）。
+ */
+export function handleHandLimit(player: PlayerState, s: GameState, target?: PlayerState) {
+  const handLimit = DEFAULT_HAND_LIMIT + (player.handLimitBonus || 0);
+  const equippedCount = [
+    player.equipment.equip,
+    player.equipment.weapon,
+    player.equipment.field,
+  ].filter(Boolean).length;
+
+  // 超出数量 = 手牌数 + 装备数 - 上限，但最多只能弃掉所有手牌
+  const excessCount = Math.min(
+    player.hand.length + equippedCount - handLimit,
+    player.hand.length
+  );
+
+  if (excessCount <= 0) return; // 未超出上限
+
+  // 取出最后 excessCount 张手牌（后 push 进 hand 的牌）
+  const excessCards = player.hand.slice(-excessCount);
+
+  // 显示爆牌提示（双方都可见）
+  showTrigger([{ type: 'text', text: `${player.name}爆牌` }], 'all');
+
+  // 逐张弃牌（此时牌还在手牌中）
+  for (const card of excessCards) {
+    discardFromHand(s, player.id, card.id);
+  }
+}
 export function drawCards(player: PlayerState, count: number, s: GameState, target?: PlayerState): PlayerState {
   let p = deepClone(player);
   for (let i = 0; i < count; i++) {
@@ -150,13 +164,7 @@ export function heal(source: PlayerState, target: PlayerState, number: number,st
       if (opponent.hand.length > 0) {
         const idx = Math.floor(Math.random() * opponent.hand.length);
         const [discarded] = opponent.hand.splice(idx, 1);
-        opponent.discardPile.push(discarded);
-        triggerDiscardEvents(opponent, discarded, state, target);
-        showTrigger([
-          { type: 'card', cardId: target.equipment.weapon.id },
-          { type: 'text', text: `${opponent.name}丢弃` },
-          { type: 'card', cardId: discarded.id },
-        ], 'all');
+        discardFromHand(state, opponent.id, discarded.id);
       }
     }
   }
@@ -489,10 +497,8 @@ export function applyCard(
       target.discardPile.push(oldCard);
       // 装备替换规则第 3 条：旧卡产生的 buff 被移除
       removeEquipmentBuffs(target, oldCard);
-      // 走完整丢弃链路（绑定诅咒/下界荒地/仙人掌摸牌/灾厄旗帜/海洋之心/烈焰棒等）
-      const holderOpp = target === p ? state.players[1 - playerIndex] : p;
-      triggerDiscardEvents(target, oldCard, state, holderOpp);
-      msgs.push(`丢弃了${oldCard.name}`);
+      // 装备替换规则第 4 条：旧卡被丢弃时触发的事件也会触发
+      triggerDiscardEvents(target, oldCard, state);
     }
     const modifiedCard = { ...card, sourcePlayerId: p.id }; // 记录装备来源玩家ID，供buff计算时参考
     target.equipment[slotKey] = modifiedCard;
@@ -512,7 +518,6 @@ export function applyCard(
         const target = isSelfTarget ? p : t;
         applyEffectToPlayer(target, BuffType.Heal, effect.value, effect.duration, card.id, state, p.id);
         heal(p, target, effect.value, state, isSelfTarget ? state.players[1 - playerIndex] : p);
-        msgs.push(`${cardName}使${targetLabel}获得生命回复${effect.value}（持续${effect.duration}回合）`);
       } else {// 即时回血
         const target = isSelfTarget ? p : t;
         heal(p, target, effect.value, state, isSelfTarget ? state.players[1 - playerIndex] : p);
@@ -535,7 +540,6 @@ export function applyCard(
         // 持续真伤
         applyEffectToPlayer(target, BuffType.Damage, effect.value, effect.duration, card.id, state, p.id);
         damage(target, target, DamageType.Real, effect.value, state);
-        msgs.push(`${cardName}使${targetLabel}获得龙息${effect.value}点（${effect.duration}回合）`);
       } else damage(p, target, DamageType.Real, effect.value, state);
     } else if (effect.buffType === BuffType.RemoveWither) {
       // 移除凋零
@@ -552,19 +556,13 @@ export function applyCard(
           { type: 'text', text: `${targetLabel}移除${removed}` },
           { type: 'buff', buffType: BuffType.Wither },
         ], 'all');
-        // 幽匿尖啸体：凋零被清空时，对方随机丢弃一张牌（触发完整丢弃事件）
+        // 幽匿尖啸体：凋零被清空时，对方随机丢弃一张牌
         if (witherCleared && target.equipment?.weapon?.name === '幽匿尖啸体') {
           const opp = isSelfTarget ? state.players[1 - playerIndex] : p;
           if (opp.hand.length > 0) {
             const idx = Math.floor(Math.random() * opp.hand.length);
             const [discarded] = opp.hand.splice(idx, 1);
-            opp.discardPile.push(discarded);
-            triggerDiscardEvents(opp, discarded, state, target);
-            showTrigger([
-              { type: 'card', cardId: target.equipment.weapon.id },
-              { type: 'text', text: `${opp.name}丢弃` },
-              { type: 'card', cardId: discarded.id },
-            ], 'all');
+            discardFromHand(state, opp.id, discarded.id);
           }
         }
         // 丛林被动：凋零清空时生命上限+1
@@ -644,6 +642,9 @@ export function applyCard(
       const target = isSelfTarget ? p : t;
       target.maxHp += effect.value;
       msgs.push(`${cardName}使${targetLabel}生命上限提升${effect.value}点`);
+      showTrigger([
+        { type: 'text', text: `${targetLabel}上限+${effect.value}` },
+      ], 'all');
       if (isSelfTarget) p = target; else t = target;
     }else if (effect.buffType === BuffType.ConditionalDiscard) {
     // 条件丢弃：检查目标手牌是否有<烟花>或<龙息>，有则随机丢弃一张，否则造成伤害
@@ -656,27 +657,12 @@ export function applyCard(
         // 如果有，随机丢弃一张符合条件的牌（这里逻辑为：如果找到了索引，则丢弃该索引对应的牌）
         // 原逻辑也是找到索引后直接丢弃，因为 findIndex 返回的是第一个匹配项，相当于在匹配的牌中随机选了一张
         const [discarded] = target.hand.splice(discardCandidateIdx, 1);
-        target.discardPile.push(discarded);
-        // 被动丢弃走完整丢弃链路（重生锚/仙人掌/海洋之心等"丢弃时触发"效果与主动丢弃一致，
-        // 内部已包含 handleDiscardBuffs 的绑定诅咒/下界荒地结算 + 魔咒爆发判定）
-        triggerDiscardEvents(target, discarded, state, isSelfTarget ? state.players[1 - playerIndex] : p);
-        if (isSelfTarget) p = target; else t = target;
-        msgs.push(`${cardName}使${targetLabel}丢弃了${discarded.name}`);
-        showTrigger([
-          { type: 'text', text: `${targetLabel}丢弃` },
-          { type: 'card', cardId: discarded.id },
-        ], 'all');
+        discardFromHand(state, target.id, discarded.id);
     } else {
         // 否则给予尸潮并造成伤害
         applyEffectToPlayer(target, BuffType.Horde, 4, 2, card.id, state, p.id);
         damage(p, target, DamageType.Physical, 4, state);
         if (isSelfTarget) p = target; else t = target;
-        msgs.push(`${cardName}给予${targetLabel} 2回合尸潮`);
-        showTrigger([
-          { type: 'text', text: `${targetLabel}获得` },
-          { type: 'buff', buffType: BuffType.Horde },
-          { type: 'text', text: '2回合' },
-        ], 'all');
     }
 
     } else if (effect.buffType === BuffType.DrawCard) {
@@ -721,26 +707,6 @@ export function applyCard(
       ], 'all');
       if (isSelfTarget) p = target; else t = target;
 
-    } else if (effect.buffType === BuffType.ForceDiscardEquip) {
-      // 强制丢弃装备/武器/场地
-      const target = isSelfTarget ? p : t;
-      const slots = ['equip', 'weapon', 'field'] as const;
-      const equipped = slots.filter(s => target.equipment[s]);
-      if (equipped.length > 0) {
-        const slot = equipped[Math.floor(Math.random() * equipped.length)];
-        const discarded = target.equipment[slot]!;
-        delete target.equipment[slot];
-        handleDiscardBuffs(target, state);
-        msgs.push(`${cardName}使${targetLabel}丢弃了${discarded.name}`);
-        showTrigger([
-          { type: 'text', text: `${targetLabel}丢弃` },
-          { type: 'card', cardId: discarded.id },
-        ], 'all');
-      } else {
-        msgs.push(`(${cardName})目标没有装备`);
-      }
-      if (isSelfTarget) p = target; else t = target;
-
     } else if (effect.buffType === BuffType.DamageOnDiscard) {
       // 丢弃伤害Debuff
       const target = isSelfTarget ? p : t;
@@ -758,7 +724,6 @@ export function applyCard(
       // 其他Buff效果
       const target = isSelfTarget ? p : t;
       applyEffectToPlayer(target, effect.buffType, effect.value, effect.duration, card.id, state, p.id);
-      msgs.push(`${cardName}对${target.name}施加了${effect.value}层${BUFF_NAMES[effect.buffType]}${effect.duration ? `（持续${effect.duration}回合）` : ''}`);
     }
   }
 
@@ -844,11 +809,13 @@ export function applyCard(
       if (lastCard.costType === CostType.Action) {
         p.actionStrategyCountThisTurn = beforeActionCount + 2;
         msgs[msgs.length - 1] += '（复制行动牌，总共消耗3次行动/锦囊次数）';
+        showMessage('玻璃板复制行动牌，总共消耗3次行动/锦囊次数', 'self');
       } else {
         p.actionStrategyCountThisTurn = beforeActionCount;
       }
     } else {
       msgs.push('玻璃板没有可复制的牌');
+      showMessage('玻璃板没有可复制的牌', 'self');
     }
 
     // 无论是否复制成功，都 push 玻璃板本体（让弹窗显示玻璃板而非被复制牌）
@@ -998,7 +965,6 @@ export function applyCard(
 
   // 组装结构化日志内容
   const logSegments: ContentSegment[][] = [
-    [{ type: 'text', text: `对${targetLabel}打出了`, bold: true }, { type: 'card', cardId: card.id }],
     ...triggerLines,
   ];
   // 血量变化

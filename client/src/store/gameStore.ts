@@ -5,6 +5,7 @@ interface PlayerInfo {
   id: string;
   name: string;
   roomId: string;
+  token?: string;
 }
 
 export type RematchState = null | 'requested' | 'invited' | 'declined';

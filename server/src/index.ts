@@ -82,6 +82,15 @@ app.get('*', (_req, res) => {
 const server = createServer(app);
 const io = new Server(server, {
   cors: { origin: '*', methods: ['GET', 'POST'] },
+  // ===== 断线重连方案A：开启 socket.io 原生连接状态恢复 =====
+  // 允许在临时断线后恢复 socket.id / rooms / data，并自动重放断线期间丢失的包。
+  // 恢复连接可通过 socket.recovered 判断；但业务层的 socketToRoom / player.socketId 映射
+  // 在 disconnect 处理器里已被清空，仍需在 connection 时用 socket.data 恢复。
+  // 注意：内置内存适配器支持该特性（单实例），仅覆盖过渡性网络中断，不覆盖页面刷新。
+  connectionStateRecovery: {
+    maxDisconnectionDuration: 2 * 60 * 1000, // 2 分钟重连窗口（默认值）
+    skipMiddlewares: true,
+  },
 });
 
 const PORT = 3001;
@@ -107,7 +116,36 @@ const PORT = 3001;
 console.log('[Notify] handler 已注册');
 
 io.on('connection', (socket) => {
-  console.log(`[连接] ${socket.id}`);
+  console.log(`[连接] ${socket.id}${(socket as any).recovered ? ' (已恢复会话)' : ''}`);
+
+  // ===== 恢复断线会话（socket.io 原生 connectionStateRecovery） =====
+  // 传输层已恢复 socket.id / rooms / data 并重放丢失包，这里只需恢复业务映射：
+  // disconnect 处理器已把 player.socketId 置空并删除 socketToRoom[socket.id]。
+  if ((socket as any).recovered) {
+    const data = (socket as any).data || {};
+    const { roomId, playerId } = data;
+    if (roomId && playerId) {
+      const ok = updatePlayerSocket(playerId, socket.id);
+      if (ok) {
+        socket.join(roomId);
+        const room = getRoom(roomId);
+        // 同步最新过滤状态给房间内所有在线玩家（升级断线期间错过的状态）
+        if (room?.gameState) {
+          for (const p of room.players) {
+            if (p.socketId) {
+              io.to(p.socketId).emit('state_update', filterStateForPlayer(room.gameState, p.id));
+            }
+          }
+        }
+        // 通知房间：该玩家回到线上，清除对端"等待重连"遮罩
+        const count = room?.players.length ?? 2;
+        io.to(roomId).emit('player_joined', { playerCount: count, playerId });
+        console.log(`[恢复] 玩家 ${playerId} 会话恢复成功 (房间 ${roomId})`);
+      } else {
+        console.log(`[恢复] 玩家 ${playerId} 会话恢复失败：房间已不存在`);
+      }
+    }
+  }
 
   // ===== 创建房间 =====
   socket.on('create_room', (playerName: string, callback) => {
@@ -117,9 +155,11 @@ io.on('connection', (socket) => {
       callback({ success: false, error: '创建房间失败' });
       return;
     }
-    const { roomId, playerId } = createResult;
+    const { roomId, playerId, token } = createResult;
     socket.join(roomId);
-    callback({ roomId, playerId });
+    // 供 connectionStateRecovery 恢复会话时定位玩家
+    (socket as any).data = { roomId, playerId };
+    callback({ roomId, playerId, token });
     console.log(`[创建成功] 房间: ${roomId}, 玩家: ${playerId}`);
   });
 
@@ -142,10 +182,13 @@ io.on('connection', (socket) => {
 
     if (result.success) {
       socket.join(roomId);
+      // 供 connectionStateRecovery 恢复会话时定位玩家
+      (socket as any).data = { roomId, playerId: result.playerId! };
 
       // 通知房间内已有玩家
       io.to(roomId).emit('player_joined', {
         playerCount: room.players.length,
+        playerId: result.playerId!,
       });
 
       // 有 gameState 时，根据是否重连发送不同事件
@@ -169,7 +212,7 @@ io.on('connection', (socket) => {
         }
       }
 
-      callback({ success: true, playerId: result.playerId });
+      callback({ success: true, playerId: result.playerId, token: result.token });
     } else {
       callback({ success: false, error: result.error });
     }
@@ -267,6 +310,8 @@ io.on('connection', (socket) => {
     if (result.roomId) {
       socket.leave(result.roomId);
     }
+    // 清除会话定位数据，避免恢复时映射到已离开的玩家
+    (socket as any).data = {};
   });
 
   // ===== 获取房间列表 =====
@@ -555,13 +600,13 @@ io.on('connection', (socket) => {
     }
   });
   // ===== 新增：重连处理 =====
-  socket.on('rejoin', ({ playerId, roomId }: { playerId: string, roomId: string }, callback) => {
+  socket.on('rejoin', ({ playerId, roomId, token }: { playerId: string, roomId: string, token?: string }, callback) => {
     console.log(`[重连] 尝试重连玩家 ${playerId} 到房间${roomId}`);
     
-    // 1. 验证玩家和房间是否匹配
+    // 1. 身份校验：需要匹配有效的会话令牌，防止仅凭 playerId+roomId 顶号
     const data = getRoomByPlayerId(playerId);
     
-    if (data && data.room.id === roomId) {
+    if (data && data.room.id === roomId && data.player.token && token && data.player.token === token) {
         const { room } = data;
         
         // 2. 更新该玩家的 socketId
@@ -570,6 +615,8 @@ io.on('connection', (socket) => {
         if (success) {
             // 3. 重新加入 Socket.IO 房间
             socket.join(roomId);
+            // 供 connectionStateRecovery 恢复会话时定位玩家
+            (socket as any).data = { roomId, playerId };
             
             // 4. 回传成功（不含原始 gameState，避免泄露对方手牌）
             callback({ success: true });
@@ -584,13 +631,13 @@ io.on('connection', (socket) => {
             }
             
             // 6. 通知房间内所有人：玩家重连成功
-            io.to(roomId).emit('player_joined', { playerCount: room.players.length });
+            io.to(roomId).emit('player_joined', { playerCount: room.players.length, playerId });
             console.log(`[重连] 玩家 ${playerId} 重连成功`);
         } else {
             callback({ success: false, error: '重连更新失败' });
         }
     } else {
-        callback({ success: false, error: '房间或玩家不存在' });
+        callback({ success: false, error: '身份验证失败或房间不存在' });
     }
   });
 });
