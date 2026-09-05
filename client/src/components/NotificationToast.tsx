@@ -1,7 +1,9 @@
 import React, { useEffect, useState, useRef, useLayoutEffect } from 'react';
 import { useNotificationStore } from '../store/notificationStore';
+import type { ContentSegment } from '@shared/types';
+import SegmentRenderer from './SegmentRenderer';
 
-const Toast = ({ notification }: { notification: { id: number; text: string } }) => {
+const Toast = ({ notification }: { notification: { id: number; text: string; segments?: ContentSegment[] } }) => {
   const remove = useNotificationStore((s) => s.removeNotification);
   const [visible, setVisible] = useState(false);
 
@@ -45,7 +47,15 @@ const Toast = ({ notification }: { notification: { id: number; text: string } })
           : 'opacity-0 -translate-y-12 scale-90 blur-sm'}`}
     >
       <img src={`/assets/icons/notification.svg`} alt="notification" className="w-4 h-4 text-accent-attack shrink-0" />
-      <span className="text-sm text-text-primary font-medium">{notification.text}</span>
+      {notification.segments?.length ? (
+        <span className="flex items-center gap-1 min-w-0">
+          {notification.segments.map((seg, i) => (
+            <SegmentRenderer key={i} segment={seg} />
+          ))}
+        </span>
+      ) : (
+        <span className="text-sm text-text-primary font-medium">{notification.text}</span>
+      )}
     </div>
   );
 };

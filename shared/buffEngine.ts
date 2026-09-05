@@ -1,5 +1,5 @@
 import { damage, DamageType, heal, showTrigger } from './cardEngine';
-import { PlayerState, ActiveBuff, BuffType, GameState, ContentSegment } from './types';
+import { PlayerState, ActiveBuff, BuffType, GameState, ContentSegment, GameLogEntry } from './types';
 
 /**
  * Buff 引擎 — 纯函数，事件驱动
@@ -88,9 +88,9 @@ export function applyEffectToPlayer(
 // ===== 回合开始处理 =====
 
 /** 回合开始结算事件写入战斗记录（与回合结束 buff 减少消息同位置，type: 'endTurn'） */
-function logSettlementEvent(state: GameState, message: string, segments: ContentSegment[], playerId: string) {
-  state.log.push({
-    playerId: state.players[state.currentTurnIndex].id,
+function logSettlementEvent(log: GameLogEntry[], message: string, segments: ContentSegment[], playerId: string) {
+  log.push({
+    playerId,
     message,
     segments: [segments],
     type: 'endTurn',
@@ -98,7 +98,7 @@ function logSettlementEvent(state: GameState, message: string, segments: Content
   });
 }
 
-export function processTurnStartBuffs(player: PlayerState, opponent: PlayerState, opponentId: string, state: GameState): PlayerState {
+export function processTurnStartBuffs(player: PlayerState, opponent: PlayerState, opponentId: string, state: GameState, log: GameLogEntry[]): PlayerState {
   let p = deepClonePlayer(player);
 
   // 龙息/尸潮/治愈：打出者（p）回合开始时触发
@@ -108,7 +108,7 @@ export function processTurnStartBuffs(player: PlayerState, opponent: PlayerState
   if(selfDamage > 0) {
     const dealt = damage(p, p, DamageType.Real, selfDamage, state);
     showTrigger([{ type: 'buff', buffType: BuffType.Damage }], 'all');
-    logSettlementEvent(state, `龙息：${p.name}受到${dealt}点魔法伤害`, [
+    logSettlementEvent(log, `龙息：${p.name}受到${dealt}点魔法伤害`, [
       { type: 'buff', buffType: BuffType.Damage },
       { type: 'hpChange', playerName: p.name, hpDelta: -dealt },
     ], p.id);
@@ -120,14 +120,14 @@ export function processTurnStartBuffs(player: PlayerState, opponent: PlayerState
         { type: 'card', cardId: player.equipment.field.id },
         { type: 'text', text: `${p.name}免疫尸潮` },
       ], 'all');
-      logSettlementEvent(state, `村庄：${p.name}免疫尸潮`, [
+      logSettlementEvent(log, `村庄：${p.name}免疫尸潮`, [
         { type: 'card', cardId: player.equipment.field.id },
         { type: 'text', text: `${p.name}免疫尸潮` },
       ], p.id);
     } else {
       const dealt = damage(p, p, DamageType.Physical, selfHorde, state);
       showTrigger([{ type: 'buff', buffType: BuffType.Horde }], 'all');
-      logSettlementEvent(state, `尸潮：${p.name}受到${dealt}点物理伤害`, [
+      logSettlementEvent(log, `尸潮：${p.name}受到${dealt}点物理伤害`, [
         { type: 'buff', buffType: BuffType.Horde },
         { type: 'hpChange', playerName: p.name, hpDelta: -dealt },
       ], p.id);
@@ -137,7 +137,7 @@ export function processTurnStartBuffs(player: PlayerState, opponent: PlayerState
   if(selfHeal > 0) {
     const healed = heal(p, p, selfHeal, state, opponent);
     showTrigger([{ type: 'buff', buffType: BuffType.Heal }], 'all');
-    logSettlementEvent(state, `生命回复：${p.name}回复${healed}点血量`, [
+    logSettlementEvent(log, `生命回复：${p.name}回复${healed}点血量`, [
       { type: 'buff', buffType: BuffType.Heal },
       { type: 'hpChange', playerName: p.name, hpDelta: healed, isHeal: true },
     ], p.id);
@@ -148,7 +148,7 @@ export function processTurnStartBuffs(player: PlayerState, opponent: PlayerState
   if(outDamage > 0) {
     const dealt = damage(p, opponent, DamageType.Real, outDamage, state);
     showTrigger([{ type: 'buff', buffType: BuffType.Damage }], 'all');
-    logSettlementEvent(state, `龙息：${opponent.name}受到${dealt}点魔法伤害`, [
+    logSettlementEvent(log, `龙息：${opponent.name}受到${dealt}点魔法伤害`, [
       { type: 'buff', buffType: BuffType.Damage },
       { type: 'hpChange', playerName: opponent.name, hpDelta: -dealt },
     ], p.id);
@@ -157,7 +157,7 @@ export function processTurnStartBuffs(player: PlayerState, opponent: PlayerState
   if(outHorde > 0) {
     const dealt = damage(p, opponent, DamageType.Physical, outHorde, state);
     showTrigger([{ type: 'buff', buffType: BuffType.Horde }], 'all');
-    logSettlementEvent(state, `尸潮：${opponent.name}受到${dealt}点物理伤害`, [
+    logSettlementEvent(log, `尸潮：${opponent.name}受到${dealt}点物理伤害`, [
       { type: 'buff', buffType: BuffType.Horde },
       { type: 'hpChange', playerName: opponent.name, hpDelta: -dealt },
     ], p.id);
@@ -166,7 +166,7 @@ export function processTurnStartBuffs(player: PlayerState, opponent: PlayerState
   if(outHeal > 0) {
     const healed = heal(p, opponent, outHeal, state, p);
     showTrigger([{ type: 'buff', buffType: BuffType.Heal }], 'all');
-    logSettlementEvent(state, `生命回复：${opponent.name}回复${healed}点血量`, [
+    logSettlementEvent(log, `生命回复：${opponent.name}回复${healed}点血量`, [
       { type: 'buff', buffType: BuffType.Heal },
       { type: 'hpChange', playerName: opponent.name, hpDelta: healed, isHeal: true },
     ], p.id);
@@ -180,7 +180,7 @@ export function processTurnStartBuffs(player: PlayerState, opponent: PlayerState
       { type: 'buff', buffType: BuffType.Resistance },
       { type: 'text', text: '+1' },
     ], 'all');
-    logSettlementEvent(state, `钻石胸甲：${p.name}获得1层抗性`, [
+    logSettlementEvent(log, `钻石胸甲：${p.name}获得1层抗性`, [
       { type: 'card', cardId: player.equipment.equip.id },
       { type: 'buff', buffType: BuffType.Resistance },
       { type: 'text', text: '+1' },
@@ -195,7 +195,7 @@ export function processTurnStartBuffs(player: PlayerState, opponent: PlayerState
       { type: 'buff', buffType: BuffType.FireResist },
       { type: 'text', text: '+1' },
     ], 'all');
-    logSettlementEvent(state, `海龟壳：${p.name}获得1层抗火`, [
+    logSettlementEvent(log, `海龟壳：${p.name}获得1层抗火`, [
       { type: 'card', cardId: player.equipment.equip.id },
       { type: 'buff', buffType: BuffType.FireResist },
       { type: 'text', text: '+1' },
@@ -210,7 +210,7 @@ export function processTurnStartBuffs(player: PlayerState, opponent: PlayerState
       { type: 'buff', buffType: BuffType.Strength },
       { type: 'text', text: '+1' },
     ], 'all');
-    logSettlementEvent(state, `三叉戟：${p.name}获得1层力量`, [
+    logSettlementEvent(log, `三叉戟：${p.name}获得1层力量`, [
       { type: 'card', cardId: player.equipment.weapon.id },
       { type: 'buff', buffType: BuffType.Strength },
       { type: 'text', text: '+1' },

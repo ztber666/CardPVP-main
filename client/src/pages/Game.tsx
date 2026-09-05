@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useSocket } from '../hooks/useSocket';
 import { useGameStore } from '../store/gameStore';
-import { CardDef, GamePhase, CostType, COST_TYPE_NAMES, BUFF_NAMES } from '@shared/types';
+import { CardDef, GamePhase, CostType, COST_TYPE_NAMES, BUFF_NAMES, ContentSegment } from '@shared/types';
 import PlayerInfo from '../components/PlayerInfo';
 import PlayerHand from '../components/PlayerHand';
 import ActionBar from '../components/ActionBar';
@@ -30,6 +30,7 @@ export default function Game() {
   const { playCard, endTurn, discardCard, unequipCard, disconnect, guessWeight, draftPick, bucketChoice, equipChoice, cancelEquipChoice, brewChoice, blazeDiscard, debugDrawCard, rematchRequest, rematchAccept, rematchDecline, surrender, redstoneChoice } = useSocket();
   const { gameState, player, isMyTurn, rematchState, rematchRequesterName, opponentDisconnected } = useGameStore();
   const cardOverlayDuration = useSettingsStore((s) => s.cardOverlayDuration);
+  const playedCardHint = useSettingsStore((s) => s.playedCardHint);
 
   const [selectedCard, setSelectedCard] = useState<CardDef | null>(null);
   const [pending, setPending] = useState(false);
@@ -253,15 +254,28 @@ useEffect(() => {
     }
 
     if (newCard) {
-      playedCardKey.current += 1;
-      setRecentPlayedCard({ ...newCard, key: playedCardKey.current });
-      if (playedCardTimer.current) clearTimeout(playedCardTimer.current);
-      playedCardTimer.current = setTimeout(() => setRecentPlayedCard(null), cardOverlayDuration);
+      if (playedCardHint === 'toast') {
+        // 提示框模式：用 displayMessage 弹出"谁 打出了/丢弃了 什么牌"（文字 + 卡图 segment）
+        const who = !newCard.fromOpponent ? '你' : '对手';
+        const action = newCard.variant === 'discard' ? '丢弃了' : '打出了';
+        const segments: ContentSegment[] = [
+          { type: 'text', text: who },
+          { type: 'text', text: `${action} ` },
+          { type: 'card', cardId: newCard.card.id },
+        ];
+        displayMessage(`${who} ${action} ${newCard.card.name}`, segments);
+      } else {
+        // 卡片模式：弹出完整卡牌 Overlay（默认）
+        playedCardKey.current += 1;
+        setRecentPlayedCard({ ...newCard, key: playedCardKey.current });
+        if (playedCardTimer.current) clearTimeout(playedCardTimer.current);
+        playedCardTimer.current = setTimeout(() => setRecentPlayedCard(null), cardOverlayDuration);
+      }
     }
 
     // 游戏重置时长度归零，同步重置 ref
     prevPlayedLenRef.current = { me: myLen, opp: oppLen, meDiscard: myDiscardLen, oppDiscard: oppDiscardLen };
-  }, [me?.lastPlayedCardDef?.length, opponent?.lastPlayedCardDef?.length, me?.lastDiscardedCardDef?.length, opponent?.lastDiscardedCardDef?.length]);
+  }, [me?.lastPlayedCardDef?.length, opponent?.lastPlayedCardDef?.length, me?.lastDiscardedCardDef?.length, opponent?.lastDiscardedCardDef?.length, playedCardHint]);
 
   // 选牌
   const handleSelectCard = useCallback((card: CardDef) => {

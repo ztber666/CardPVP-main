@@ -498,7 +498,7 @@ export function applyCard(
       // 装备替换规则第 3 条：旧卡产生的 buff 被移除
       removeEquipmentBuffs(target, oldCard);
       // 装备替换规则第 4 条：旧卡被丢弃时触发的事件也会触发
-      triggerDiscardEvents(target, oldCard, state);
+      triggerDiscardEvents(target, oldCard, state, undefined, []);
     }
     const modifiedCard = { ...card, sourcePlayerId: p.id }; // 记录装备来源玩家ID，供buff计算时参考
     target.equipment[slotKey] = modifiedCard;
@@ -788,7 +788,7 @@ export function applyCard(
         state.players[1 - playerIndex] = result.gameState.players[1 - pIdx];
         t = p; // 恢复自瞄别名不变式
       }
-      state.log = result.gameState.log;
+      state.log = result.gameState.log.slice(0, 1); // 只保留玻璃板本体的 log，内层结算的 log 由 msgs 追加到外层
 
       // 2. 撤销内部 applyCard 造成的消耗次数变化，恢复到只有玻璃板自身 1 次消耗的状态
       p.actionStrategyCountThisTurn = beforeActionCount;
@@ -835,7 +835,10 @@ export function applyCard(
       p.pendingGuessCardWeight = w;
       p.pendingGuessCardName = revealedCard.name;
     } else {
-      showMessage('侦测器：目标手牌为空', 'self');
+      showTrigger([
+        { type: 'card', cardId: card.id },
+        { type: 'text', text: ':目标手牌为空或自瞄，无法展示' },
+      ], 'self');
     }
   }
 
@@ -965,6 +968,7 @@ export function applyCard(
 
   // 组装结构化日志内容
   const logSegments: ContentSegment[][] = [
+    [{ type: 'text', text: `对${targetLabel}打出了`, bold: true }, { type: 'card', cardId: card.id }],
     ...triggerLines,
   ];
   // 血量变化

@@ -175,7 +175,8 @@ export default function PlayerHand({ cards, player, disabled, selectedCardId, on
                   <CardComponent
                     card={card}
                     compact
-                    disabled={disabled || exhausted}
+                    disabled={disabled}
+                    dimmed={exhausted}
                     selected={selectedCardId === card.id}
                     onClick={() => onSelectCard(card)}
                   />

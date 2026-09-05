@@ -5,6 +5,8 @@ interface Props {
   card: CardDef;
   compact?: boolean;
   disabled?: boolean;
+  /** 仅置灰（如消耗次数用尽），仍可点击；不设 disabled 属性 */
+  dimmed?: boolean;
   selected?: boolean;
   onClick?: () => void;
   hidden?: boolean;
@@ -53,7 +55,7 @@ const COST_TYPE_LABELS: Record<string, string> = {
   [CostType.Counter]: '策略',
 };
 
-export default function Card({ card, compact, disabled, selected, onClick, hidden, played }: Props) {
+export default function Card({ card, compact, disabled, dimmed, selected, onClick, hidden, played }: Props) {
   // 卡背
   if (hidden) {
     return (
@@ -79,7 +81,9 @@ export default function Card({ card, compact, disabled, selected, onClick, hidde
             ? '-translate-y-4 scale-105 shadow-2xl ring-2 ring-accent-shield/50 border-accent-shield/60 z-10'
             : disabled
               ? 'opacity-60 cursor-not-allowed grayscale'
-              : 'cursor-pointer hover:shadow-xl hover:border-card-border/80'
+              : dimmed
+                ? 'opacity-60 grayscale cursor-pointer hover:border-card-border/60'
+                : 'cursor-pointer hover:shadow-xl hover:border-card-border/80'
           }`}
       >
         <img src={imgUrl} alt={card.name} className="w-9 h-9 sm:w-10 sm:h-10 object-contain mt-0.5" style={{ imageRendering: 'pixelated' }} />
