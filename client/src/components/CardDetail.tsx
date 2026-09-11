@@ -1,10 +1,11 @@
 import { ReactNode, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { CardDef, COST_TYPE_NAMES, ActiveBuff } from '@shared/types';
+import { CardDef, ActiveBuff } from '@shared/types';
 import { parseIcon } from '@shared/constants';
 import { getCardImageUrl } from '../utils/cardImage';
 import BuffBadge from './BuffBadge';
 import SectionDivider from './SectionDivider';
+import { cardText, costFullName, costFullZh, useLang, useT } from '../i18n/i18n';
 
 interface Props {
   card: CardDef & { buffs?: ActiveBuff[] };
@@ -32,6 +33,9 @@ const TYPE_GLOW: Record<string, string> = {
 };
 
 export default function CardDetail({ card, onClose }: Props) {
+  const lang = useLang();
+  const t = useT();
+  const { name: displayName, description: displayDesc } = cardText(lang, card);
   const cardTypes = parseIcon(card.icon);
   const glow = TYPE_GLOW[cardTypes[0]] || 'bg-accent-shield/25';
 
@@ -55,7 +59,7 @@ export default function CardDetail({ card, onClose }: Props) {
       onClick={onClose}
     >
       <div
-        className="relative w-80 max-w-full bg-card-bg/95 backdrop-blur-xl border border-card-border/80 rounded-2xl shadow-2xl shadow-black/50 overflow-hidden animate-scale-in"
+        className="relative w-80 max-w-full bg-card-bg/95 backdrop-blur-xl border border-card-border/80 rounded-2xl shadow-2xl shadow-black/50 overflow-hidden animate-fade-in"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 顶部主题色装饰光带 */}
@@ -66,7 +70,7 @@ export default function CardDetail({ card, onClose }: Props) {
         {/* 关闭按钮 */}
         <button
           onClick={onClose}
-          aria-label="关闭"
+          aria-label={t('关闭', 'Close')}
           className="absolute top-3 right-3 z-10 w-8 h-8 flex items-center justify-center rounded-full bg-black/25 text-text-secondary/80 text-xl leading-none backdrop-blur-sm transition-all duration-300 hover:bg-black/50 hover:text-text-primary hover:rotate-90"
         >
           ×
@@ -80,7 +84,7 @@ export default function CardDetail({ card, onClose }: Props) {
             <div className="absolute inset-2 rounded-full border border-white/5" />
             <img
               src={getCardImageUrl(card.id)}
-              alt={card.name}
+              alt={displayName}
               style={{ imageRendering: 'pixelated' }}
               className="relative w-20 h-20 object-contain drop-shadow-[0_6px_14px_rgba(0,0,0,0.45)]"
             />
@@ -89,7 +93,7 @@ export default function CardDetail({ card, onClose }: Props) {
 
         {/* 名称 + 类型 */}
         <div className="px-6 text-center">
-          <h2 className="text-lg font-bold text-text-primary antialiased">{card.name}</h2>
+          <h2 className="text-lg font-bold text-text-primary antialiased">{displayName}</h2>
           <div className="flex flex-wrap justify-center gap-1.5 mt-2.5">
             {cardTypes.map((t, i) => (
               <span
@@ -98,7 +102,7 @@ export default function CardDetail({ card, onClose }: Props) {
                   TYPE_STYLE[t] || 'bg-accent-shield/10 text-accent-shield ring-accent-shield/30'
                 }`}
               >
-                {COST_TYPE_NAMES[t] || '其他'}
+                {costFullName(lang, t, costFullZh(t))}
               </span>
             ))}
           </div>
@@ -107,7 +111,7 @@ export default function CardDetail({ card, onClose }: Props) {
         {/* 状态 */}
         {card.buffs && card.buffs.length > 0 && (
           <section className="px-6 pt-1">
-            <SectionDivider label="状态" />
+            <SectionDivider label={t('状态', 'Status')} />
             <div className="flex flex-wrap items-center justify-center gap-1.5">
               {card.buffs.map((buff, i) => (
                 <BuffBadge key={i} buff={buff} compactMode={false} />
@@ -118,10 +122,10 @@ export default function CardDetail({ card, onClose }: Props) {
 
         {/* 描述 */}
         <section className="px-6 pt-1 pb-6">
-          <SectionDivider label="描述" />
+          <SectionDivider label={t('描述', 'Description')} />
           <div className="rounded-xl bg-black/25 border border-card-border/60 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
             <p className="text-[13px] leading-loose text-text-primary/90 antialiased max-h-36 overflow-y-auto">
-              {card.description}
+              {displayDesc}
             </p>
           </div>
         </section>

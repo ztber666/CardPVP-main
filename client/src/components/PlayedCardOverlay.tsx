@@ -3,6 +3,7 @@ import { CardDef } from '@shared/types';
 import { getCardImageUrl } from '../utils/cardImage';
 import { useSettingsStore } from '../store/settingsStore';
 import { MotionConfig, motion, Variants } from 'framer-motion';
+import { cardText, useLang, useT } from '../i18n/i18n';
 
 type OverlayVariant = 'self' | 'opponent' | 'discard';
 
@@ -119,6 +120,12 @@ export default function PlayedCardOverlay({
   onClose,
 }: Props) {
   const duration = useSettingsStore((s) => s.cardOverlayDuration) || 2200;
+  const lang = useLang();
+  const t = useT();
+  const { name: displayName } = cardText(lang, card);
+  const actionLabel = variant === 'discard'
+    ? t('丢弃了此牌', 'discarded this card')
+    : t('打出了此牌', 'played this card');
   const [leaving, setLeaving] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -205,7 +212,7 @@ export default function PlayedCardOverlay({
                   whileTap={{ scale: 0.82 }}
                   transition={{ type: 'spring', stiffness: 420, damping: 18 }}
                   className="pointer-events-auto absolute -right-2 -top-2 grid h-5 w-5 place-items-center rounded-full border border-card-border bg-card-bg/90 text-xs font-bold leading-none text-text-secondary shadow-md opacity-60 backdrop-blur-sm transition-colors duration-200 hover:border-accent-attack/60 hover:text-accent-attack hover:opacity-100"
-                  aria-label="关闭"
+                  aria-label={t('关闭', 'Close')}
                 >
                   ×
                 </motion.button>
@@ -214,7 +221,7 @@ export default function PlayedCardOverlay({
               <motion.img
                 variants={imageVariants}
                 src={getCardImageUrl(card.id)}
-                alt={card.name}
+                alt={displayName}
                 draggable={false}
                 className="h-11 w-11 object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.45)]"
                 style={{ imageRendering: 'pixelated' }}
@@ -224,7 +231,7 @@ export default function PlayedCardOverlay({
                 variants={itemVariants}
                 className="max-w-[7.5rem] truncate text-xs font-semibold tracking-wide text-text-primary"
               >
-                {card.name}
+                {displayName}
               </motion.span>
 
               <motion.div
@@ -237,7 +244,7 @@ export default function PlayedCardOverlay({
                   transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
                 />
                 <span className="max-w-[6.5rem] truncate text-[10px] font-medium leading-none">
-                  {playerName} {style.label}
+                  {playerName} {actionLabel}
                 </span>
               </motion.div>
             </div>

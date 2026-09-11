@@ -25,12 +25,14 @@ import { useSettingsStore } from '../store/settingsStore';
 import ChoiceDialog from '../components/ChoiceDialog';
 import { useChoiceModal } from '../hooks/useChoiceModal';
 import SettingsModal from '../components/SettingsModal';
+import { useT } from '../i18n/i18n';
 
 export default function Game() {
   const { playCard, endTurn, discardCard, unequipCard, disconnect, guessWeight, draftPick, bucketChoice, equipChoice, cancelEquipChoice, brewChoice, blazeDiscard, debugDrawCard, rematchRequest, rematchAccept, rematchDecline, surrender, redstoneChoice } = useSocket();
   const { gameState, player, isMyTurn, rematchState, rematchRequesterName, opponentDisconnected } = useGameStore();
   const cardOverlayDuration = useSettingsStore((s) => s.cardOverlayDuration);
   const playedCardHint = useSettingsStore((s) => s.playedCardHint);
+  const t = useT();
 
   const [selectedCard, setSelectedCard] = useState<CardDef | null>(null);
   const [pending, setPending] = useState(false);
@@ -256,8 +258,8 @@ useEffect(() => {
     if (newCard) {
       if (playedCardHint === 'toast') {
         // 提示框模式：用 displayMessage 弹出"谁 打出了/丢弃了 什么牌"（文字 + 卡图 segment）
-        const who = !newCard.fromOpponent ? '你' : '对手';
-        const action = newCard.variant === 'discard' ? '丢弃了' : '打出了';
+        const who = !newCard.fromOpponent ? t('你', 'You') : t('对手', 'Opponent');
+        const action = newCard.variant === 'discard' ? t('丢弃了', 'discarded') : t('打出了', 'played');
         const segments: ContentSegment[] = [
           { type: 'text', text: who },
           { type: 'text', text: `${action} ` },
@@ -399,7 +401,7 @@ useEffect(() => {
     if (res.success) {
       useGameStore.getState().setRematchState('requested');
     } else {
-      showToast(res.error || '请求失败');
+      showToast(res.error || t('请求失败', 'Request failed'));
     }
   }, [rematchRequest, showToast]);
 
@@ -420,7 +422,7 @@ useEffect(() => {
   // 侦测器
   const handleGuessSubmit = useCallback(async () => {
     const guess = parseInt(guessInput);
-    if (isNaN(guess) || guess < 0) { showToast('请输入有效数字'); return; }
+    if (isNaN(guess) || guess < 0) { showToast(t('请输入有效数字', 'Please enter a valid number')); return; }
     setShowGuessDialog(false);
     setPending(true);
     await guessWeight(guess);
@@ -446,10 +448,10 @@ useEffect(() => {
     setPending(false);
   }, [draftPick]);
 
-  if (!gameState || !me || !opponent) {
+    if (!gameState || !me || !opponent) {
     return (
       <div className="min-h-viewport flex items-center justify-center bg-page-bg">
-        <span className="text-text-secondary/60">加载中...</span>
+        <span className="text-text-secondary/60">{t('加载中...', 'Loading...')}</span>
       </div>
     );
   }
@@ -515,13 +517,13 @@ useEffect(() => {
         {opponentDisconnected && (
             <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center text-white">
                 <div className="text-5xl mb-4 animate-bounce">⚠️</div>
-                <div className="text-2xl font-bold mb-4">对手已断开连接</div>
-                <div className="text-sm opacity-80 mb-6">等待对方重连中...</div>
+                <div className="text-2xl font-bold mb-4">{t('对手已断开连接', 'Opponent disconnected')}</div>
+                <div className="text-sm opacity-80 mb-6">{t('等待对方重连中...', 'Waiting for opponent to reconnect...')}</div>
                 {/* 房间号 + 昵称，各自带复制按钮 */}
                 <div className="flex flex-col gap-2 mb-6 w-72">
                   {[
-                    { label: '房间号', value: gameState?.roomId ?? '' },
-                    { label: '我的昵称', value: me?.name ?? player?.name ?? '' },
+                    { label: t('房间号', 'Room code'), value: gameState?.roomId ?? '' },
+                    { label: t('我的昵称', 'My nickname'), value: me?.name ?? player?.name ?? '' },
                   ].map(({ label, value }) => (
                     <div key={label} className="flex items-center gap-2 bg-white/10 border border-white/15 rounded-xl px-3 py-2">
                       <span className="text-xs text-white/60 shrink-0">{label}</span>
@@ -529,8 +531,8 @@ useEffect(() => {
                       <button
                         onClick={async () => {
                           const ok = await copyText(value);
-                          if (ok) displayMessage('已复制');
-                          else displayMessage('复制失败，请手动选中复制');
+                          if (ok) displayMessage(t('已复制', 'Copied'));
+                          else displayMessage(t('复制失败，请手动选中复制', 'Copy failed, please copy manually'));
                         }}
                         className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 active:scale-90 transition-all text-xs"
                       >
@@ -543,7 +545,7 @@ useEffect(() => {
                     onClick={handleBackToLobby}
                     className="px-6 py-2.5 rounded-xl bg-white/15 border border-white/25 text-white font-semibold text-sm hover:bg-white/25 transition-colors"
                 >
-                    返回大厅
+                    {t('返回大厅', 'Back to Lobby')}
                 </button>
             </div>
       )}
@@ -580,29 +582,69 @@ useEffect(() => {
  {/* 记录按钮 — 左侧（非我方回合时提升存在感） */}
 <button
   onClick={(e) => { e.stopPropagation(); setShowGameLog(true); }}
-  className={`absolute left-3 z-10 flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] transition-all duration-300 active:scale-95 ${
+  className={`absolute left-3 z-10 flex items-center rounded-lg py-1 text-[11px] transition-all duration-300 active:scale-95 ${
     isMyTurn
-      ? 'text-text-secondary/60 hover:bg-card-border/15 hover:text-text-secondary'
-      : 'border border-card-border/40 bg-card-bg/60 text-text-secondary shadow-sm backdrop-blur-sm hover:bg-card-bg hover:text-text-primary'
+      ? 'gap-0 px-1.5 text-text-secondary/60 hover:bg-card-border/15 hover:text-text-secondary'
+      : 'gap-1.5 px-2.5 border border-card-border/40 bg-card-bg/60 text-text-secondary shadow-sm backdrop-blur-sm hover:bg-card-bg hover:text-text-primary'
   }`}
-  title="对局记录"
+  title={t('对局记录', 'Match log')}
 >
-  <span className={`text-xs leading-none transition-opacity duration-300 ${isMyTurn ? 'opacity-70' : 'opacity-100'}`}>📋</span>
-  <span>记录</span>
+  <svg
+    className={`h-3.5 w-3.5 shrink-0 transition-opacity duration-300 ${isMyTurn ? 'opacity-70' : 'opacity-100'}`}
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <rect width="8" height="4" x="8" y="2" rx="1" ry="1" />
+    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+    <path d="M12 11h4" />
+    <path d="M12 16h4" />
+    <path d="M8 11h.01" />
+    <path d="M8 16h.01" />
+  </svg>
+  <span
+    className={`overflow-hidden whitespace-nowrap transition-all duration-300 ${
+      isMyTurn ? 'max-w-0 opacity-0' : 'max-w-[80px] opacity-100'
+    }`}
+  >
+    {t('记录', 'Log')}
+  </span>
 </button>
 
 {/* 选项按钮 — 右侧（非我方回合时提升存在感） */}
 <button
   onClick={(e) => { e.stopPropagation(); setShowOptions(true); }}
-  className={`absolute right-3 z-10 flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] transition-all duration-300 active:scale-95 ${
+  className={`absolute right-3 z-10 flex items-center rounded-lg py-1 text-[11px] transition-all duration-300 active:scale-95 ${
     isMyTurn
-      ? 'text-text-secondary/60 hover:bg-card-border/15 hover:text-text-secondary'
-      : 'border border-card-border/40 bg-card-bg/60 text-text-secondary shadow-sm backdrop-blur-sm hover:bg-card-bg hover:text-text-primary'
+      ? 'gap-0 px-1.5 text-text-secondary/60 hover:bg-card-border/15 hover:text-text-secondary'
+      : 'gap-1.5 px-2.5 border border-card-border/40 bg-card-bg/60 text-text-secondary shadow-sm backdrop-blur-sm hover:bg-card-bg hover:text-text-primary'
   }`}
-  title="选项"
+  title={t('选项', 'Options')}
 >
-  <span className={`text-xs leading-none transition-opacity duration-300 ${isMyTurn ? 'opacity-70' : 'opacity-100'}`}>⚙️</span>
-  <span>选项</span>
+  <svg
+    className={`h-3.5 w-3.5 shrink-0 transition-opacity duration-300 ${isMyTurn ? 'opacity-70' : 'opacity-100'}`}
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
+    <circle cx="12" cy="12" r="3"></circle>
+  </svg>
+  <span
+    className={`overflow-hidden whitespace-nowrap transition-all duration-300 ${
+      isMyTurn ? 'max-w-0 opacity-0' : 'max-w-[80px] opacity-100'
+    }`}
+  >
+    {t('选项', 'Options')}
+  </span>
 </button>
         <ActionBar isMyTurn={isMyTurn} onEndTurn={handleEndTurn} pending={pending} noMovesLeft={noMovesLeft} />
         {isMyTurn && <ConsumptionCounter player={me} />}
@@ -650,7 +692,7 @@ useEffect(() => {
       <button
         onClick={(e) => { e.stopPropagation(); toggleHand(); }}
         className={`group relative z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-xl border transition-all duration-300 shadow-sm ${cardBtnColor}`}
-        title={handCollapsed ? '展开手牌' : '收起手牌'}
+        title={handCollapsed ? t('展开手牌', 'Expand hand') : t('收起手牌', 'Collapse hand')}
       >
         <span className="text-sm leading-none">🃏</span>
         <span className="text-xs font-bold tabular-nums">{me.hand.length}+{meequipCount}</span>
@@ -691,7 +733,7 @@ useEffect(() => {
       {/* 次数耗尽提示 */}
       {selectedCard && isCardExhausted(selectedCard) && (
         <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 animate-fade-in pointer-events-none">
-          <div className="bg-white border border-accent-equip/30 rounded-xl px-5 py-3 shadow-lg text-sm text-accent-equip font-medium">⚠️ 本回合行动/锦囊次数已用完</div>
+          <div className="bg-white border border-accent-equip/30 rounded-xl px-5 py-3 shadow-lg text-sm text-accent-equip font-medium">⚠️ {t('本回合行动/锦囊次数已用完', 'Action/strategy uses used up this turn')}</div>
         </div>
       )}
 
@@ -703,22 +745,22 @@ useEffect(() => {
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in" onClick={handleAreaClick}>
           <div className="bg-card-bg border border-card-border rounded-2xl p-8 text-center max-w-sm w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
             <div className="text-5xl mb-4">{iWin ? '🎉' : '😢'}</div>
-            <h2 className="text-xl font-bold text-text-primary mb-2">{iWin ? '恭喜获胜！' : '战败'}</h2>
-            <p className="text-text-secondary text-sm mb-6">{iWin ? `你击败了 ${opponent.name}！` : `${opponent.name} 击败了你`}</p>
+            <h2 className="text-xl font-bold text-text-primary mb-2">{iWin ? t('恭喜获胜！', 'Victory!') : t('战败', 'Defeat')}</h2>
+            <p className="text-text-secondary text-sm mb-6">{iWin ? `${t('你击败了', 'You defeated')} ${opponent.name}!` : `${opponent.name} ${t('击败了你', 'defeated you')}`}</p>
             <div className="flex gap-2">
               {rematchState === 'requested' ? (
                 <button disabled className="flex-1 py-2.5 rounded-xl bg-accent-equip/15 border border-accent-equip/25 text-accent-equip font-semibold text-sm opacity-60 cursor-not-allowed">
-                  ⏳ 等待对方接受...
+                  ⏳ {t('等待对方接受...', 'Waiting for opponent...')}
                 </button>
               ) : (
                 <button onClick={handleRematchRequest} disabled={rematchPending} className="flex-1 py-2.5 rounded-xl bg-accent-equip/15 border border-accent-equip/25 text-accent-equip font-semibold text-sm hover:bg-accent-equip/25 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                  {rematchPending ? '⏳' : '⚔️'} 再战
+                  {rematchPending ? '⏳' : '⚔️'} {t('再战', 'Rematch')}
                 </button>
               )}
-              <button onClick={handleBackToLobby} className="flex-1 py-2.5 rounded-xl bg-accent-shield/15 border border-accent-shield/25 text-accent-shield font-semibold text-sm hover:bg-accent-shield/25 transition-colors">返回大厅</button>
+              <button onClick={handleBackToLobby} className="flex-1 py-2.5 rounded-xl bg-accent-shield/15 border border-accent-shield/25 text-accent-shield font-semibold text-sm hover:bg-accent-shield/25 transition-colors">{t('返回大厅', 'Back to Lobby')}</button>
             </div>
             {rematchState === 'declined' && (
-              <p className="text-xs text-accent-attack/70 mt-3 animate-fade-in">对方拒绝了再战请求</p>
+              <p className="text-xs text-accent-attack/70 mt-3 animate-fade-in">{t('对方拒绝了再战请求', 'Opponent declined the rematch')}</p>
             )}
           </div>
         </div>
@@ -740,16 +782,16 @@ useEffect(() => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
           <div className="bg-card-bg border border-card-border rounded-2xl p-6 max-w-sm w-full mx-4 shadow-xl text-center">
             <div className="text-4xl mb-3">⚔️</div>
-            <h3 className="text-lg font-bold text-text-primary mb-2">再战邀请</h3>
+            <h3 className="text-lg font-bold text-text-primary mb-2">{t('再战邀请', 'Rematch Invitation')}</h3>
             <p className="text-sm text-text-secondary mb-6">
-              {rematchRequesterName ? `${rematchRequesterName} ` : '对方'}请求再来一局！
+              {rematchRequesterName ? `${rematchRequesterName} ` : t('对方', 'Opponent')}{t('请求再来一局！', 'invites you to a rematch!')}
             </p>
             <div className="flex gap-3">
               <button onClick={handleRematchAccept} className="flex-1 py-2.5 rounded-xl bg-accent-heal/15 border border-accent-heal/25 text-accent-heal font-semibold text-sm hover:bg-accent-heal/25 transition-colors">
-                ✅ 接受
+                ✅ {t('接受', 'Accept')}
               </button>
               <button onClick={handleRematchDecline} className="flex-1 py-2.5 rounded-xl border border-card-border text-text-secondary text-sm hover:bg-card-bg/50 transition-colors">
-                ✕ 拒绝
+                ✕ {t('拒绝', 'Decline')}
               </button>
             </div>
           </div>
@@ -760,7 +802,7 @@ useEffect(() => {
       {selectedCard && isCardExhausted(selectedCard) && (
         <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 animate-fade-in">
           <div className="bg-white border border-accent-equip/30 rounded-xl px-5 py-3 shadow-lg text-sm text-accent-equip font-medium">
-            ⚠️ 本回合行动/锦囊次数已用完
+            ⚠️ {t('本回合行动/锦囊次数已用完', 'Action/strategy uses used up this turn')}
           </div>
         </div>
       )}
@@ -769,7 +811,7 @@ useEffect(() => {
       {showOptions && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 backdrop-blur-sm" onClick={() => setShowOptions(false)}>
           <div className="bg-card-bg border border-card-border rounded-2xl p-6 max-w-xs w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-text-primary mb-4 text-center">房间号：{player?.roomId ?? '----'}</h3>
+            <h3 className="text-lg font-bold text-text-primary mb-4 text-center">{t('房间号', 'Room code')}：{player?.roomId ?? '----'}</h3>
             <div className="flex flex-col gap-2">
               <button
                 onClick={() => {
@@ -778,7 +820,7 @@ useEffect(() => {
                 }}
                 className="w-full py-3 rounded-xl border border-card-border text-text-secondary text-sm font-medium hover:bg-card-bg/50 transition-colors"
               >
-                📖 图鉴
+                📖 {t('图鉴', 'Gallery')}
               </button>
               <button
                 onClick={() => {
@@ -787,7 +829,7 @@ useEffect(() => {
                 }}
                 className="w-full py-3 rounded-xl border border-card-border text-text-secondary text-sm font-medium hover:bg-card-bg/50 transition-colors"
               >
-                📋 规则
+                📋 {t('规则', 'Rules')}
               </button>
               <button
                 onClick={() => {
@@ -796,7 +838,7 @@ useEffect(() => {
                 }}
                 className="w-full py-3 rounded-xl border border-card-border text-text-secondary text-sm font-medium hover:bg-card-bg/50 transition-colors"
               >
-                ⚙️ 设置
+                ⚙️ {t('设置', 'Settings')}
               </button>
               <button
                 onClick={async () => {
@@ -805,7 +847,7 @@ useEffect(() => {
                 }}
                 className="w-full py-3 rounded-xl border border-accent-damage/30 text-accent-damage text-sm font-medium hover:bg-accent-damage/10 transition-colors"
               >
-                🏳️ 投降
+                🏳️ {t('投降', 'Surrender')}
               </button>
             </div>
           </div>

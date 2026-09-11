@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { GameLogEntry, ContentSegment } from '@shared/types';
 import SegmentDetailImage from './SegmentDetailImage';
+import { useT } from '../i18n/i18n';
 
 interface Props {
   log: GameLogEntry[];
@@ -67,6 +68,7 @@ function LineRenderer({ segments, myPlayerId, isOpponent }: { segments: ContentS
 
 export default function GameLogPanel({ log, onClose, myPlayerId }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const t = useT();
 
   // 打开时及日志更新时平滑滚动到底部
   useEffect(() => {
@@ -91,7 +93,7 @@ export default function GameLogPanel({ log, onClose, myPlayerId }: Props) {
           <div className="flex items-center gap-3">
             {/* 渐变指示条 */}
             <div className="w-1 h-6 bg-gradient-to-b from-accent-primary to-accent-primary/40 rounded-full" />
-            <h3 className="text-lg font-semibold text-text-primary tracking-wider">战斗记录</h3>
+            <h3 className="text-lg font-semibold text-text-primary tracking-wider">{t('战斗记录', 'Battle Log')}</h3>
           </div>
           <button 
             onClick={onClose}
@@ -107,7 +109,7 @@ export default function GameLogPanel({ log, onClose, myPlayerId }: Props) {
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-5 space-y-3 scroll-smooth">
           {log.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full text-text-secondary/50">
-              <p className="text-sm">暂无战斗记录</p>
+              <p className="text-sm">{t('暂无战斗记录', 'No battle records yet')}</p>
             </div>
           )}
 

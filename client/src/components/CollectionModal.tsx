@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { CardCollectionContent } from './CardCollection';
 import { BuffCollectionContent } from './BuffCollection';
+import { useT } from '../i18n/i18n';
 
 type Tab = 'cards' | 'buffs';
 
 export default function CollectionModal({ onClose }: { onClose: () => void }) {
+  const t = useT();
   const [tab, setTab] = useState<Tab>('cards');
 
   return (
@@ -27,7 +29,7 @@ export default function CollectionModal({ onClose }: { onClose: () => void }) {
                   : 'text-text-secondary hover:text-text-primary'
               }`}
             >
-              🃏 卡牌
+              🃏 {t('卡牌', 'Cards')}
             </button>
             <button
               onClick={() => setTab('buffs')}
@@ -37,7 +39,7 @@ export default function CollectionModal({ onClose }: { onClose: () => void }) {
                   : 'text-text-secondary hover:text-text-primary'
               }`}
             >
-              ✨ 状态
+              ✨ {t('状态', 'Effects')}
             </button>
           </div>
           <button

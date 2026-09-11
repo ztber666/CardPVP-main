@@ -104,7 +104,7 @@ const PORT = 3001;
   const event = category === 'trigger' ? 'server_trigger' : 'server_notify';
   const roomId = getActiveNotifyRoomId();
   const playerId = getActiveNotifyPlayerId();
-  console.log('[Notify] 服务端发送', event + ':', msg, 'target:', target, 'room:', roomId ?? 'N/A', 'player:', playerId ?? 'N/A');
+  //console.log('[Notify] 服务端发送', event + ':', msg, 'target:', target, 'room:', roomId ?? 'N/A', 'player:', playerId ?? 'N/A');
   if (roomId) {
     // 定向广播：只发给当前处理房间内的玩家（已通过 socket.join 加入该 socket.io room）
     io.to(roomId).emit(event, { text: msg, target, playerId });
@@ -113,7 +113,7 @@ const PORT = 3001;
     io.emit(event, { text: msg, target, playerId });
   }
 };
-console.log('[Notify] handler 已注册');
+//console.log('[Notify] handler 已注册');
 
 io.on('connection', (socket) => {
   console.log(`[连接] ${socket.id}${(socket as any).recovered ? ' (已恢复会话)' : ''}`);

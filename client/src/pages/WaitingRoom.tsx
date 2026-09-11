@@ -3,8 +3,10 @@ import { useSocket } from '../hooks/useSocket';
 import { useGameStore } from '../store/gameStore';
 import { useIsLandscape } from '../hooks/useOrientation';
 import { displayMessage } from '../store/notificationStore';
+import { useT } from '../i18n/i18n';
 
 export default function WaitingRoom() {
+  const t = useT();
   const { leaveRoom, updateName } = useSocket();
   const { player } = useGameStore();
   const isLandscape = useIsLandscape();
@@ -50,7 +52,7 @@ export default function WaitingRoom() {
       setCopied('room');
       setTimeout(() => setCopied(null), 2000);
     } else {
-      displayMessage('复制失败，请手动选中复制');
+      displayMessage(t('复制失败，请手动选中复制', 'Copy failed, please copy manually'));
     }
   };
 
@@ -62,7 +64,7 @@ export default function WaitingRoom() {
       setCopied('link');
       setTimeout(() => setCopied(null), 2000);
     } else {
-      displayMessage('复制失败，请手动选中复制');
+      displayMessage(t('复制失败，请手动选中复制', 'Copy failed, please copy manually'));
     }
   };
 
@@ -77,7 +79,7 @@ export default function WaitingRoom() {
       const result = await updateName(trimmed);
       setNameSaving(false);
       if (!result.success) {
-        displayMessage(result.error || '昵称更新失败');
+        displayMessage(result.error || t('昵称更新失败', 'Failed to update nickname'));
       }
     }, 800);
   };
@@ -95,9 +97,9 @@ export default function WaitingRoom() {
   const LeftBlock = (
     <div className="flex flex-col items-center animate-fade-in">
       <img src="/assets/connect.png" alt="" className="w-20 h-20 mb-5 drop-shadow-lg" />
-      <h1 className="text-2xl font-bold text-text-primary mb-4">等待对手加入</h1>
+      <h1 className="text-2xl font-bold text-text-primary mb-4">{t('等待对手加入', 'Waiting for opponent')}</h1>
       <div className="bg-card-bg border border-card-border rounded-2xl px-8 py-5 mb-5">
-        <p className="text-text-secondary text-xs mb-1 text-center">房间码</p>
+        <p className="text-text-secondary text-xs mb-1 text-center">{t('房间码', 'Room code')}</p>
         <p className="text-4xl font-bold tracking-[0.3em] text-accent-shield text-center">{roomId}</p>
       </div>
       {/* 等待动画 */}
@@ -118,13 +120,13 @@ export default function WaitingRoom() {
           onClick={handleCopyRoom}
           className={`${btnBase} flex-1 bg-card-bg border border-card-border text-text-primary hover:border-accent-shield/30 hover:text-accent-shield`}
         >
-          {copied === 'room' ? '✓ 已复制' : '📋 复制房号'}
+          {copied === 'room' ? '✓ ' + t('已复制', 'Copied') : '📋 ' + t('复制房号', 'Copy code')}
         </button>
         <button
           onClick={handleShareLink}
           className={`${btnBase} flex-1 bg-card-bg border border-card-border text-text-primary hover:border-accent-shield/30 hover:text-accent-shield`}
         >
-          {copied === 'link' ? '✓ 已复制' : '🔗 分享链接'}
+          {copied === 'link' ? '✓ ' + t('已复制', 'Copied') : '🔗 ' + t('分享链接', 'Share link')}
         </button>
       </div>
 
@@ -132,14 +134,14 @@ export default function WaitingRoom() {
       <div className="relative">
         <input
           type="text"
-          placeholder="输入昵称"
+          placeholder={t('输入昵称', 'Nickname')}
           value={nickName}
           onChange={(e) => handleNameChange(e.target.value)}
           maxLength={12}
           className="w-full bg-card-bg border border-card-border rounded-xl px-4 py-3 text-sm text-text-primary placeholder-text-secondary/50 outline-none focus:border-accent-shield/50 transition-colors"
         />
         {nameSaving && (
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-secondary">保存中...</span>
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-secondary">{t('保存中...', 'Saving...')}</span>
         )}
       </div>
 
@@ -148,12 +150,12 @@ export default function WaitingRoom() {
         onClick={handleCancel}
         className={`${btnBase} bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20`}
       >
-        ✕ 取消匹配
+        ✕ {t('取消匹配', 'Cancel Match')}
       </button>
 
       {/* 提示 */}
       <p className="text-center text-text-secondary text-xs mt-1">
-        将房间码或链接发送给好友即可对战
+        {t('将房间码或链接发送给好友即可对战', 'Send the code or link to a friend to start a battle')}
       </p>
     </div>
   );

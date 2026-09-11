@@ -3,6 +3,7 @@ import { useSocket, type RoomInfo } from '../hooks/useSocket';
 import { useGameStore } from '../store/gameStore';
 import { useIsLandscape } from '../hooks/useOrientation';
 import { displayMessage } from '../store/notificationStore';
+import { useLang, useT, type AppLang } from '../i18n/i18n';
 
 // 房间状态信息
 const STATUS_INFO: Record<string, { text: string; dotClass: string }> = {
@@ -11,6 +12,20 @@ const STATUS_INFO: Record<string, { text: string; dotClass: string }> = {
   reconnecting: { text: '等待重连', dotClass: 'bg-orange-400' },
   cleaning:     { text: '即将清除', dotClass: 'bg-red-400' },
 };
+
+const STATUS_EN: Record<string, string> = {
+  waiting: 'Waiting',
+  playing: 'In battle',
+  reconnecting: 'Reconnect',
+  cleaning: 'Closing soon',
+};
+
+function statusText(lang: AppLang, status: string): string {
+  const info = STATUS_INFO[status];
+  if (!info) return statusText(lang, 'playing');
+  if (lang === 'en') return STATUS_EN[status] || info.text;
+  return info.text;
+}
 
 // 房间图片
 const ROOM_IMAGES = ['/assets/room/1.png', '/assets/room/2.png', '/assets/room/3.png', '/assets/room/4.png', '/assets/room/5.png', '/assets/room/6.png', '/assets/room/7.png', '/assets/room/8.png', '/assets/room/9.png', '/assets/room/10.png', '/assets/room/11.png', '/assets/room/12.png'];
@@ -31,6 +46,8 @@ export default function RoomList() {
   const { getRooms, createRoom, joinRoom } = useSocket();
   const { connected } = useGameStore();
   const isLandscape = useIsLandscape();
+  const lang = useLang();
+  const t = useT();
 
   const [searchQuery, setSearchQuery] = useState(() => {
     const params = new URLSearchParams(window.location.search);
@@ -89,7 +106,7 @@ export default function RoomList() {
     try {
       await createRoom(displayName);
     } catch (e: any) {
-      setError(e.message || '创建房间失败');
+      setError(e.message || t('创建房间失败', 'Failed to create room'));
     } finally {
       setLoading(false);
     }
@@ -100,7 +117,7 @@ export default function RoomList() {
     if (!connected) return;
     const joinable = rooms.filter(r => r.status === 'waiting');
     if (joinable.length === 0) {
-      setError('没有可加入的房间');
+      setError(t('没有可加入的房间', 'No rooms available to join'));
       setTimeout(() => setError(null), 3000);
       return;
     }
@@ -130,10 +147,10 @@ export default function RoomList() {
     try {
       const result = await joinRoom(room.id, displayName, verify);
       if (!result.success) {
-        setError(result.error || '加入房间失败');
+        setError(result.error || t('加入房间失败', 'Failed to join room'));
       }
     } catch (e: any) {
-      setError(e.message || '加入房间失败');
+      setError(e.message || t('加入房间失败', 'Failed to join room'));
     } finally {
       setLoading(false);
     }
@@ -156,7 +173,7 @@ export default function RoomList() {
   const renderRoom = (room: RoomInfo) => {
     const info = STATUS_INFO[room.status] || STATUS_INFO.playing;
     const canJoin = room.status === 'waiting' || room.status === 'reconnecting' || room.status === 'cleaning';
-    const joinLabel = room.status === 'waiting' ? '加入' : '重连';
+    const joinLabel = room.status === 'waiting' ? t('加入', 'Join') : t('重连', 'Reconnect');
     return (
       <div
         key={room.id}
@@ -173,7 +190,7 @@ export default function RoomList() {
           <p className="text-base font-bold text-text-primary tracking-wider">{room.id}</p>
           <div className="flex items-center gap-1.5 mt-0.5">
             <span className={`w-2 h-2 rounded-full ${info.dotClass}`} />
-            <span className="text-xs text-text-secondary">{info.text}</span>
+            <span className="text-xs text-text-secondary">{statusText(lang, room.status)}</span>
             <span className="text-xs text-text-secondary/50 ml-2">{formatTime(room.elapsed)}</span>
           </div>
         </div>
@@ -199,7 +216,7 @@ export default function RoomList() {
       >
         ←
       </button>
-      <h1 className="text-lg font-bold text-text-primary">房间列表</h1>
+      <h1 className="text-lg font-bold text-text-primary">{t('房间列表', 'Rooms')}</h1>
     </div>
   );
 
@@ -207,7 +224,7 @@ export default function RoomList() {
   const SearchInput = (
     <input
       type="text"
-      placeholder="查找房间..."
+      placeholder={t('查找房间...', 'Search rooms...')}
       value={searchQuery}
       onChange={(e) => setSearchQuery(e.target.value.toUpperCase())}
       className="w-full bg-card-bg border border-card-border rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-secondary/50 outline-none focus:border-accent-shield/50 transition-colors uppercase tracking-widest"
@@ -221,7 +238,7 @@ export default function RoomList() {
       onClick={handleRefresh}
       className="w-full py-2 rounded-xl bg-card-bg border border-card-border text-text-secondary text-sm hover:text-accent-shield hover:border-accent-shield/30 transition-all active:scale-95 active:bg-accent-shield/10"
     >
-      ↻ 刷新({countdown}s)
+      ↻ {t('刷新', 'Refresh')}({countdown}s)
     </button>
   );
 
@@ -232,7 +249,7 @@ export default function RoomList() {
       disabled={!connected || loading}
       className="w-full py-2.5 rounded-xl bg-accent-shield/15 border border-accent-shield/25 text-accent-shield text-sm font-semibold hover:bg-accent-shield/25 transition-colors disabled:opacity-40"
     >
-      🎲 随机加入
+      🎲 {t('随机加入', 'Random Join')}
     </button>
   );
 
@@ -240,7 +257,7 @@ export default function RoomList() {
   const NameInput = (
     <input
       type="text"
-      placeholder="输入昵称（可选）"
+      placeholder={t('输入昵称（可选）', 'Nickname (optional)')}
       value={playerName}
       onChange={(e) => setPlayerName(e.target.value)}
       className="w-full bg-card-bg border border-card-border rounded-xl px-3 py-2.5 text-sm text-text-primary placeholder-text-secondary/50 outline-none focus:border-accent-shield/50 transition-colors"
@@ -255,7 +272,7 @@ export default function RoomList() {
       disabled={!connected || loading}
       className="w-full py-2.5 rounded-xl bg-accent-shield/20 border border-accent-shield/30 text-accent-shield text-sm font-semibold hover:bg-accent-shield/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
     >
-      {loading ? '处理中...' : '创建房间'}
+      {loading ? t('处理中...', 'Processing...') : t('创建房间', 'Create Room')}
     </button>
   );
 
@@ -274,11 +291,11 @@ export default function RoomList() {
         className="bg-card-bg border border-card-border rounded-2xl p-6 max-w-sm w-full mx-4 shadow-xl animate-fade-in"
         onClick={e => e.stopPropagation()}
       >
-        <h2 className="text-lg font-bold text-text-primary mb-1">重连房间 {verifyRoom.id}</h2>
-        <p className="text-sm text-text-secondary mb-4">请输入对方昵称以校验身份</p>
+        <h2 className="text-lg font-bold text-text-primary mb-1">{t('重连房间', 'Reconnect to room')} {verifyRoom.id}</h2>
+        <p className="text-sm text-text-secondary mb-4">{t('请输入对方昵称以校验身份', 'Enter the opponent nickname to verify')}</p>
         <input
           type="text"
-          placeholder="对方昵称"
+          placeholder={t('对方昵称', 'Opponent nickname')}
           value={verifyName}
           onChange={(e) => setVerifyName(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') handleVerifyConfirm(); }}
@@ -291,14 +308,14 @@ export default function RoomList() {
             onClick={() => setVerifyRoom(null)}
             className="flex-1 py-2.5 rounded-xl border border-card-border text-text-secondary text-sm font-medium hover:bg-card-bg/50 transition-colors"
           >
-            取消
+            {t('取消', 'Cancel')}
           </button>
           <button
             onClick={handleVerifyConfirm}
             disabled={!verifyName.trim() || loading}
             className="flex-1 py-2.5 rounded-xl bg-accent-shield/20 border border-accent-shield/30 text-accent-shield text-sm font-semibold hover:bg-accent-shield/30 transition-colors disabled:opacity-40"
           >
-            {loading ? '加入中...' : '确认重连'}
+            {loading ? t('加入中...', 'Joining...') : t('确认重连', 'Reconnect')}
           </button>
         </div>
       </div>
@@ -318,14 +335,14 @@ export default function RoomList() {
             <div className="flex-1 overflow-y-auto px-4 py-3">
               {filteredRooms.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-text-secondary gap-3">
-                  <p className="text-sm">{searchQuery.trim() ? '未找到匹配的房间' : '暂无房间'}</p>
+                  <p className="text-sm">{searchQuery.trim() ? t('未找到匹配的房间', 'No matching rooms') : t('暂无房间', 'No rooms yet')}</p>
                   {!searchQuery.trim() && (
                     <button
                       onClick={handleCreate}
                       disabled={!connected || loading}
                       className="text-sm font-semibold text-accent-shield hover:text-accent-shield/80 active:scale-95 transition-all disabled:opacity-40"
                     >
-                      创建→
+                      {t('创建→', 'Create →')}
                     </button>
                   )}
                 </div>
@@ -339,12 +356,12 @@ export default function RoomList() {
             <div className="shrink-0 w-64 px-4 py-3 border-l border-card-border/30 flex flex-col gap-3 items-center overflow-y-auto">
               {RandomJoinBtn}
               <div className="w-full">
-                <label className="text-xs text-text-secondary mb-1 block text-center">查找</label>
+                <label className="text-xs text-text-secondary mb-1 block text-center">{t('查找', 'Search')}</label>
                 {SearchInput}
               </div>
               {RefreshBtn}
               <div className="w-full">
-                <label className="text-xs text-text-secondary mb-1 block text-center">昵称</label>
+                <label className="text-xs text-text-secondary mb-1 block text-center">{t('昵称', 'Nickname')}</label>
                 {NameInput}
               </div>
               {CreateBtn}
@@ -368,7 +385,7 @@ export default function RoomList() {
               onClick={handleRefresh}
               className="shrink-0 px-3 py-2 rounded-xl bg-card-bg border border-card-border text-text-secondary text-sm hover:text-accent-shield hover:border-accent-shield/30 transition-all active:scale-95 active:bg-accent-shield/10"
             >
-              ↻ 刷新({countdown}s)
+              ↻ {t('刷新', 'Refresh')}({countdown}s)
             </button>
           </div>
           {SearchInput}
@@ -376,7 +393,7 @@ export default function RoomList() {
         <div className="flex-1 overflow-y-auto px-4 py-3">
           {filteredRooms.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-text-secondary">
-              <p className="text-sm">{searchQuery.trim() ? '未找到匹配的房间' : '暂无房间'}</p>
+              <p className="text-sm">{searchQuery.trim() ? t('未找到匹配的房间', 'No matching rooms') : t('暂无房间', 'No rooms yet')}</p>
               {!searchQuery.trim() && (
                 <button
                   onClick={handleCreate}
@@ -402,14 +419,14 @@ export default function RoomList() {
                 disabled={!connected || loading}
                 className="flex-1 py-2.5 rounded-xl bg-accent-shield/20 border border-accent-shield/30 text-accent-shield text-sm font-semibold hover:bg-accent-shield/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
               >
-                {loading ? '处理中...' : '创建房间'}
+                {loading ? t('处理中...', 'Processing...') : t('创建房间', 'Create Room')}
               </button>
               <button
                 onClick={handleRandomJoin}
                 disabled={!connected || loading}
                 className="flex-1 py-2.5 rounded-xl bg-card-bg border border-card-border text-text-secondary text-sm font-semibold hover:text-accent-shield hover:border-accent-shield/30 transition-colors disabled:opacity-40 active:scale-95"
               >
-                🎲 随机加入
+                🎲 {t('随机加入', 'Random Join')}
               </button>
             </div>
           </div>

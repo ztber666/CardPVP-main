@@ -1,4 +1,5 @@
 import { PlayerState, BuffType } from '@shared/types';
+import { useT } from '../i18n/i18n';
 
 interface Props {
   player: PlayerState;
@@ -22,6 +23,7 @@ function getHpColor(hp: number) {
 const UNIT_PX = 6;
 
 export default function PlayerInfo({ player, isOpponent, className, onAvatarClick }: Props) {
+  const t = useT();
   const hp = player.hp;
   const hpColor = getHpColor(hp);
 
@@ -67,7 +69,7 @@ export default function PlayerInfo({ player, isOpponent, className, onAvatarClic
         {/* 名称 */}
         <div className="flex items-center gap-1">
           <span className="font-semibold text-xs text-text-primary truncate max-w-[80px]">{player.name}</span>
-          {isOpponent && <span className="text-[8px] text-text-secondary bg-card-bg/60 px-1 rounded-full border border-card-border/50">对手</span>}
+          {isOpponent && <span className="text-[8px] text-text-secondary bg-card-bg/60 px-1 rounded-full border border-card-border/50">{t('对手', 'Rival')}</span>}
         </div>
         {/* 血条 + 数值显示 */}
         <div className="flex items-center gap-1">

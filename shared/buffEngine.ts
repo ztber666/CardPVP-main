@@ -99,7 +99,10 @@ function logSettlementEvent(log: GameLogEntry[], message: string, segments: Cont
 }
 
 export function processTurnStartBuffs(player: PlayerState, opponent: PlayerState, opponentId: string, state: GameState, log: GameLogEntry[]): PlayerState {
-  let p = deepClonePlayer(player);
+  // 原地结算：p 就是传入的 player（=== state.players[i] 同一对象），
+  // 保证这里触发的伤害/盾牌摸牌/爆牌弃牌链路（drawCards → handleHandLimit → discardFromHand）
+  // 全部作用在同一对象上，副作用不会被随后的槽位赋值覆盖
+  const p = player;
 
   // 龙息/尸潮/治愈：打出者（p）回合开始时触发
   // 检查所有人身上由 p 施加的 buff，source 统一为 p

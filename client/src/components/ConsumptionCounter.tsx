@@ -1,11 +1,13 @@
 import { PlayerState } from '@shared/types';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useT } from '../i18n/i18n';
 
 interface Props {
   player: PlayerState;
 }
 
 export default function ConsumptionCounter({ player }: Props) {
+  const t = useT();
   // 计算剩余次数
   const healRemaining = 1 - (player.healCountThisTurn || 0);
   const attackRemaining = 1 - (player.attackCountThisTurn || 0);
@@ -52,7 +54,7 @@ export default function ConsumptionCounter({ player }: Props) {
             exit="exit"
             transition={springTransition} // 现在类型是正确的了
             className={`${baseStyle} bg-accent-heal/15 text-accent-heal border-accent-heal/30`}
-            title="剩余回血次数"
+            title={t('剩余回血次数', 'Heal plays left')}
           >
             <img src="/assets/icons/health.svg" alt="Health" className="w-3.5 h-3.5 opacity-50" />
             <span className="tabular-nums">{healRemaining}</span>
@@ -69,7 +71,7 @@ export default function ConsumptionCounter({ player }: Props) {
             exit="exit"
             transition={springTransition}
             className={`${baseStyle} bg-accent-attack/15 text-accent-attack border-accent-attack/30`}
-            title="剩余攻击次数"
+            title={t('剩余攻击次数', 'Attack plays left')}
           >
             <img src="/assets/icons/attack.svg" alt="Attack" className="w-3.5 h-3.5 opacity-50" />
             <span className="tabular-nums">{attackRemaining}</span>
@@ -86,7 +88,7 @@ export default function ConsumptionCounter({ player }: Props) {
             exit="exit"
             transition={springTransition}
             className={`${baseStyle} bg-accent-equip/15 text-accent-equip border-accent-equip/30`}
-            title="剩余行动/锦囊次数"
+            title={t('剩余行动/锦囊次数', 'Action/strategy plays left')}
           >
             <div className="flex items-center -space-x-1">
               <img src="/assets/icons/action.svg" alt="Action" className="w-3 h-3 opacity-50" />

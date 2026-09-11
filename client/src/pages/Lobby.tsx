@@ -4,8 +4,10 @@ import { useIsLandscape } from '../hooks/useOrientation';
 import CollectionModal from '../components/CollectionModal';
 import RulesModal from '../components/RulesModal';
 import SettingsModal from '../components/SettingsModal';
+import { useT } from '../i18n/i18n';
 
 export default function Lobby() {
+  const t = useT();
   const { connected } = useGameStore();
   const isLandscape = useIsLandscape();
   const [showCollection, setShowCollection] = useState(false);
@@ -24,7 +26,7 @@ export default function Lobby() {
     <div className="flex flex-col items-center animate-fade-in">
       <img src="/assets/game.png" alt="" className="w-28 h-28 mb-4 drop-shadow-lg" />
       <h1 className="text-4xl font-bold text-gradient">CardPVP</h1>
-      <p className="text-text-secondary mt-2 text-lg">线上卡牌对战</p>
+      <p className="text-text-secondary mt-2 text-lg">{t('线上卡牌对战', 'Online Card Battle')}</p>
     </div>
   );
 
@@ -36,25 +38,25 @@ export default function Lobby() {
         disabled={!connected}
         className={`${btnBase} bg-accent-shield/20 border-2 border-accent-shield/40 text-accent-shield hover:bg-accent-shield/30 hover:border-accent-shield/60 shadow-lg shadow-accent-shield/10`}
       >
-        ⚔️ 开始
+        ⚔️ {t('开始', 'Start')}
       </button>
       <button
         onClick={() => setShowRules(true)}
         className={`${btnBase} bg-card-bg border-2 border-card-border text-text-primary hover:border-accent-shield/30 hover:bg-card-bg/80`}
       >
-        📋 规则
+        📋 {t('规则', 'Rules')}
       </button>
       <button
         onClick={() => setShowCollection(true)}
         className={`${btnBase} bg-card-bg border-2 border-card-border text-text-primary hover:border-accent-shield/30 hover:bg-card-bg/80`}
       >
-        📖 图鉴
+        📖 {t('图鉴', 'Gallery')}
       </button>
       <button
         onClick={() => setShowSettings(true)}
         className={`${btnBase} bg-card-bg border-2 border-card-border text-text-primary hover:border-accent-shield/30 hover:bg-card-bg/80`}
       >
-        ⚙️ 设置
+        ⚙️ {t('设置', 'Settings')}
       </button>
     </div>
   );

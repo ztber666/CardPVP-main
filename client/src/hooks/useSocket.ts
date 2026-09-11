@@ -405,7 +405,7 @@ export function useSocket() {
     });
 
     socket.on('server_notify', (data: { text: string; target: string; playerId?: string | null }) => {
-      console.log('[Notify] 客户端收到 server_notify:', data);
+      //console.log('[Notify] 客户端收到 server_notify:', data);
       const me = useGameStore.getState().player;
       // P0-6：按服务端下发的行动玩家 playerId 精确归属，而非 isMyTurn 推断
       if (data.target === 'all') {

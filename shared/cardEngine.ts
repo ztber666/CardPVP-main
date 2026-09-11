@@ -12,7 +12,7 @@ import { discardFromHand, findOpponent, triggerDiscardEvents, triggerDrawEvents 
 // category: 'hint'=提示（NotificationToast） 'trigger'=触发效果反馈（TriggerEffectPanel）
 export function showMessage(msg: string, target: 'all' | 'self' | 'opponent' = 'all', category: 'hint' | 'trigger' = 'hint') {
   const h = (globalThis as any).__card_notify_handler;
-  console.log('[Notify] showMessage:', msg, 'target:', target, 'category:', category, 'handler:', !!h);
+  //console.log('[Notify] showMessage:', msg, 'target:', target, 'category:', category, 'handler:', !!h);
   if (h) h(msg, target, category);
 }
 
@@ -92,12 +92,17 @@ export function handleHandLimit(player: PlayerState, s: GameState, target?: Play
     discardFromHand(s, player.id, card.id);
   }
 }
+
+/**
+ * 摸牌：原地修改传入的 player（含爆牌弃牌链路），返回同一引用。
+ * 调用方持有的引用（state.players[i] / applyCard 的 p、t）继续有效，
+ * 这样 handleHandLimit → discardFromHand(s, ...) 才能作用在同一个对象上。
+ */
 export function drawCards(player: PlayerState, count: number, s: GameState, target?: PlayerState): PlayerState {
-  let p = deepClone(player);
   for (let i = 0; i < count; i++) {
     // 2. 随机选择一张牌（索引）
-    const randomIndex = Math.floor(Math.random() * p.deck.length);
-    const sourceCard = p.deck[randomIndex];
+    const randomIndex = Math.floor(Math.random() * player.deck.length);
+    const sourceCard = player.deck[randomIndex];
 
     // 3. 复制这张牌到手牌，并赋予新的唯一 ID（防止 ID 冲突）
     const drawn: CardDef = {
@@ -105,14 +110,14 @@ export function drawCards(player: PlayerState, count: number, s: GameState, targ
       id: generateCardInstanceId(sourceCard.id, 'drawn'),
     };
 
-    addCardToHand(p, drawn, s, target);
+    addCardToHand(player, drawn, s, target);
 
     // 触发摸牌事件（陷阱箱等）
-    triggerDrawEvents(p, drawn, s);
+    triggerDrawEvents(player, drawn, s);
 
-    // 注意：这里没有执行 p.deck.splice 或 shift，原牌堆不变
+    // 注意：这里没有执行 deck.splice 或 shift，原牌堆不变
   }
-  return p;
+  return player;
 }
 
 // ===== 洗牌 =====
@@ -128,10 +133,10 @@ export function shuffleDeck(player: PlayerState): PlayerState {
 }
 
 // ===== 从手牌移除卡牌 =====
+/** 原地移除手牌中的指定卡牌（返回同一引用，不再克隆） */
 function removeFromHand(player: PlayerState, cardId: string): PlayerState {
-  const p = deepClone(player);
-  p.hand = p.hand.filter(c => c.id !== cardId);
-  return p;
+  player.hand = player.hand.filter(c => c.id !== cardId);
+  return player;
 }
 
 // ===== 应用卡牌效果到目标 =====
@@ -313,8 +318,8 @@ export function damage(source: PlayerState, target: PlayerState, type: DamageTyp
     }
     //盾牌：受到物理伤害时摸1张牌
     if (target.equipment?.equip?.name === '盾牌') {
-      const drawn = drawCards(target, 1, state, source);
-      Object.assign(target, drawn);
+      // drawCards 已原地化：摸牌与随之而来的爆牌弃牌都直接作用在 target 上，无需写回
+      drawCards(target, 1, state, source);
       showTrigger([
         { type: 'card', cardId: target.equipment.equip!.id },
         { type: 'text', text: `${target.name}摸1` },
@@ -405,10 +410,12 @@ export function applyCard(
   const cardName = card.name;
 
   // ===== 用一份统一的状态 p 代表卡牌使用者 =====
-  // 效果产生"攻击者"和"防御者"两份修改时，最终合并回 p
-  let p = deepClone(state.players[playerIndex]);
-  // 当目标非己时，targetState 是另一个玩家
-  let t = isSelfTarget ? p : deepClone(state.players[targetIndex]);
+  // 出牌链路只允许本函数开头这一次 deepClone：p / t 直接引用 state 内的玩家对象，
+  // 后续所有效果（含摸牌/弃牌/damage/heal）一律原地修改，绝不再重新赋值 p / t
+  // （重赋值会切断与 state.players 以及调用方 live 引用的同一性，副作用随之丢失）。
+  const p = state.players[playerIndex];
+  // 当目标非己时，t 是另一个玩家；自瞄时 t === p（别名不变式）
+  const t = isSelfTarget ? p : state.players[targetIndex];
   // 记录卡牌处理前的血量，用于日志末尾追加血量变化
   const oldHpP = p.hp;
   const oldHpT = isSelfTarget ? p.hp : t.hp;
@@ -427,11 +434,8 @@ export function applyCard(
   const prevTriggerCollector = triggerCollector;
   triggerCollector = [];
 
-  // 从手牌移除
-  p = removeFromHand(p, card.id);
-  // removeFromHand 会返回新克隆，重新同步 t（自瞄时 t 必须与 p 保持同一引用，
-  // 否则后续 damage(p, t, ...) 会打到过期的旧克隆上）
-  if (isSelfTarget) t = p;
+  // 从手牌移除（原地修改 p.hand，p 引用不变；自瞄时 t === p 的别名不变式天然保持）
+  removeFromHand(p, card.id);
 
   // 更新消耗计数
   const subtype = getCardSubtype(card);
@@ -502,7 +506,6 @@ export function applyCard(
     }
     const modifiedCard = { ...card, sourcePlayerId: p.id }; // 记录装备来源玩家ID，供buff计算时参考
     target.equipment[slotKey] = modifiedCard;
-    if (isSelfTarget) p = target; else t = target;
     msgs.push(`${cardName}已装备`);
   }
 
@@ -576,7 +579,6 @@ export function applyCard(
       } else {
         msgs.push(`(${cardName})目标没有凋零`);
       }
-      if (isSelfTarget) p = target; else t = target;
 
     } else if (effect.buffType === BuffType.ReduceDuration) {
       // 减少限时状态回合数
@@ -623,7 +625,6 @@ export function applyCard(
           { type: 'text', text: `移除 ${highest.name}-${dmg}` },
         ], 'all');
       }
-      if (isSelfTarget) p = target; else t = target;
 
     } else if (effect.buffType === BuffType.ReduceMaxHp) {
       // 降低生命上限
@@ -635,7 +636,6 @@ export function applyCard(
       showTrigger([
         { type: 'text', text: `${targetLabel}上限-${reduction}` },
       ], 'all');
-      if (isSelfTarget) p = target; else t = target;
 
     } else if (effect.buffType === BuffType.IncreaseMaxHp) {
       // 提升生命上限
@@ -645,7 +645,6 @@ export function applyCard(
       showTrigger([
         { type: 'text', text: `${targetLabel}上限+${effect.value}` },
       ], 'all');
-      if (isSelfTarget) p = target; else t = target;
     }else if (effect.buffType === BuffType.ConditionalDiscard) {
     // 条件丢弃：检查目标手牌是否有<烟花>或<龙息>，有则随机丢弃一张，否则造成伤害
     const target = isSelfTarget ? p : t;
@@ -662,7 +661,6 @@ export function applyCard(
         // 否则给予尸潮并造成伤害
         applyEffectToPlayer(target, BuffType.Horde, 4, 2, card.id, state, p.id);
         damage(p, target, DamageType.Physical, 4, state);
-        if (isSelfTarget) p = target; else t = target;
     }
 
     } else if (effect.buffType === BuffType.DrawCard) {
@@ -672,10 +670,11 @@ export function applyCard(
       // 而非 t（自瞄时 t 与 p 同引用，会把爆牌目标算成自己——P0-10）
       const opponent = isSelfTarget ? state.players[1 - playerIndex] : p;
       const oldHandLen = target.hand.length;
-      const drawn = drawCards(target, effect.value, state, opponent);
-      const newCards = drawn.hand.length - oldHandLen;
+      // drawCards 原地修改 target（=== p 或 t）并返回同一引用：
+      // 摸牌副作用与随之触发的爆牌弃牌都落在同一对象上，无需再写回
+      drawCards(target, effect.value, state, opponent);
+      const newCards = target.hand.length - oldHandLen;
       msgs.push(`${cardName}使${targetLabel}摸了${Math.max(0, newCards)}张牌`);
-      if (isSelfTarget) { p = drawn; t = p; } else { t = drawn; }
 
     } else if (effect.buffType === BuffType.StealCard) {
       // 抽取目标一张手牌
@@ -705,7 +704,6 @@ export function applyCard(
         { type: 'text', text: `${targetLabel}手牌:` } as ContentSegment,
         ...target.hand.slice(0, count).map(c => ({ type: 'card', cardId: c.id } as ContentSegment)),
       ], 'all');
-      if (isSelfTarget) p = target; else t = target;
 
     } else if (effect.buffType === BuffType.DamageOnDiscard) {
       // 丢弃伤害Debuff
@@ -719,7 +717,6 @@ export function applyCard(
       const buffTypes = new Set(p.buffs.map(b => b.buffType));
       heal(p, target, buffTypes.size, state, isSelfTarget ? state.players[1 - playerIndex] : p);
       msgs.push(`${cardName}为${targetLabel}回复了${buffTypes.size}点血量`);
-      if (isSelfTarget) p = target; else t = target;
     } else {
       // 其他Buff效果
       const target = isSelfTarget ? p : t;
@@ -729,8 +726,8 @@ export function applyCard(
 
   // ===== 特殊卡牌处理 =====
   // 仙人掌：对所有人造成1点物理伤害（自己 + 对手各一次）
-  // 修复：自瞄时不能对 p 打两次，必须对“真实的对手”（state 中另一玩家）结算，
-  //       且其原地修改会在末尾写回并穿过玻璃板递归保留
+  // 修复：自瞄时不能对 p 打两次，必须对“真实的对手”（state 中另一玩家）结算；
+  //       其原地修改直接落在 state.players 上，并穿过玻璃板递归保留
   if (card.name === '仙人掌') {
     const opponentObj = isSelfTarget ? state.players[1 - playerIndex] : t;
     damage(p, p, DamageType.Physical, 1, state);
@@ -775,18 +772,19 @@ export function applyCard(
       // a) 递归必须基于“当前已结算的 state”克隆，而不是最初的 gameState 参数，
       //    否则自瞄 HealAll / 幽匿尖啸体弃牌 / 盾牌摸牌等对对手的原地修改会在递归中丢失；
       // b) 只覆盖使用者/目标槽位，绝不再用 t（自瞄时 t===p）去覆盖对手槽位；
-      // c) 内层完整日志并入外层 state.log，被复制牌的结算记录不再凭空消失。
+      // c) 内层结算结果原地合并回 p / t（Object.assign），保证内外层 state.players[i]
+      //    是同一对象：p、t 是 const，玻璃板递归后副作用不再因重新赋值而丢失。
       const newState = deepClone(state);
       newState.players[playerIndex] = p;
       if (!isSelfTarget) newState.players[targetIndex] = t;
       const result = applyCard(newState, playerId, targetId, lastCard);
       const pIdx = result.gameState.players.findIndex(pl => pl.id === playerId);
-      p = result.gameState.players[pIdx];
-      t = result.gameState.players[1 - pIdx];
-      if (isSelfTarget) {
-        // 自瞄时对手槽位未写入，把内层结算后的对手副本合并回来（含原地修改）
-        state.players[1 - playerIndex] = result.gameState.players[1 - pIdx];
-        t = p; // 恢复自瞄别名不变式
+      Object.assign(p, result.gameState.players[pIdx]);
+      if (!isSelfTarget) {
+        Object.assign(t, result.gameState.players[1 - pIdx]);
+      } else {
+        // 自瞄时对手槽位未写入 newState，内层对“真实对手”的修改需单独原地合并回 state
+        Object.assign(state.players[1 - playerIndex], result.gameState.players[1 - pIdx]);
       }
       state.log = result.gameState.log.slice(0, 1); // 只保留玻璃板本体的 log，内层结算的 log 由 msgs 追加到外层
 
@@ -883,13 +881,9 @@ export function applyCard(
     }
   }
 
-  // ===== 写入状态 =====
-  if (isSelfTarget) {
-    state.players[playerIndex] = p;  // p 已包含所有变化
-  } else {
-    state.players[playerIndex] = p;
-    state.players[targetIndex] = t;
-  }
+  // ===== 状态写入 =====
+  // p / t 就是 state.players[playerIndex] / state.players[targetIndex] 本身（见函数开头），
+  // 所有效果都是原地修改，因此这里不需要（也不允许）再写回——写回只会是自赋值。
 
   // 检查胜负
   for (const p of state.players) {

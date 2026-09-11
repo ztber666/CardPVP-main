@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { ActiveBuff, BUFF_NAMES } from '@shared/types';
+import { ActiveBuff } from '@shared/types';
 import { BUFF_ICON_MAP } from './BuffCollection';
 import BuffDetail from './BuffDetail';
+import { buffName, useLang } from '../i18n/i18n';
 
 // 保持清晰易读的配色方案
 export const BUFF_STYLES: Record<string, string> = {
@@ -30,9 +31,10 @@ interface Props {
 
 export default function BuffBadge({ buff, compactMode }: Props) {
   const [showDetail, setShowDetail] = useState(false);
+  const lang = useLang();
 
   const styleClass = BUFF_STYLES[buff.buffType] || 'bg-slate-50 text-slate-600 border-slate-200';
-  const name = BUFF_NAMES[buff.buffType] || buff.buffType;
+  const name = buffName(lang, buff.buffType);
   const iconNum = BUFF_ICON_MAP[buff.buffType];
   const hasDuration = buff.remainingTurns !== undefined;
 

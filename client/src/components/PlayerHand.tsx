@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, ReactNode } from 'react';
 import { CardDef, PlayerState } from '@shared/types';
 import { isCardConsumptionExhausted } from '@shared/validation';
 import CardComponent from './Card';
+import { useT } from '../i18n/i18n';
 
 interface Props {
   cards: CardDef[];
@@ -36,6 +37,7 @@ const CardEnterWrapper = ({ children, isNew }: { children: ReactNode; isNew: boo
 };
 
 export default function PlayerHand({ cards, player, disabled, selectedCardId, onSelectCard, collapsed, onToggle }: Props) {
+  const t = useT();
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   
@@ -126,7 +128,7 @@ export default function PlayerHand({ cards, player, disabled, selectedCardId, on
 
   if (cards.length === 0) {
     return (
-      <div className="text-text-secondary/40 text-xs p-4 text-center">无手牌</div>
+      <div className="text-text-secondary/40 text-xs p-4 text-center">{t('无手牌', 'No cards in hand')}</div>
     );
   }
 

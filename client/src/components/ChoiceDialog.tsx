@@ -4,6 +4,7 @@ import type { ChoiceRequest } from '../hooks/useChoiceModal';
 import { getCardImageUrl, getCardByImageId } from '../utils/cardImage';
 import CardDetail from './CardDetail';
 import BuffDetail from './BuffDetail';
+import { useT } from '../i18n/i18n';
 
 const KEYFRAMES = `
 @keyframes cd-backdrop-in{from{opacity:0}to{opacity:1}}
@@ -30,6 +31,7 @@ interface Props {
 }
 
 export default function ChoiceDialog({ request, onSubmit, onDismiss, onCancelServer, busy }: Props) {
+  const t = useT();
   const a = ACCENT[request.accent];
   const [hidden, setHidden] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -133,7 +135,7 @@ export default function ChoiceDialog({ request, onSubmit, onDismiss, onCancelSer
             <button
   onClick={e => { e.stopPropagation(); hide(); }}
   className="flex h-8 w-8 items-center justify-center rounded-lg text-text-secondary/60 transition-all hover:bg-card-border/15 hover:text-text-secondary active:scale-90"
-  title="暂时隐藏"
+  title={t('暂时隐藏', 'Hide temporarily')}
 >
   <svg
     className="h-3.5 w-3.5"
@@ -169,22 +171,24 @@ export default function ChoiceDialog({ request, onSubmit, onDismiss, onCancelSer
                   value={value}
                   onChange={e => { setValue(e.target.value); if (invalid) setInvalid(false); }}
                   onKeyDown={e => { if (e.key === 'Enter') { e.stopPropagation(); submitNumber(); } }}
-                  placeholder="输入数字"
+                  placeholder={t('输入数字', 'Enter a number')}
                   className={`w-full rounded-xl border bg-page-bg/40 px-4 py-3 text-center text-lg font-bold text-text-primary outline-none transition-colors focus:border-accent-shield/50 ${invalid ? 'border-accent-attack/60' : 'border-card-border'}`}
                 />
                 <p className={`mt-1.5 h-4 text-xs text-accent-attack transition-opacity ${invalid ? 'opacity-100' : 'opacity-0'}`}>
-                  请输入 {request.min}~{request.max} 的数字
+                  {t('请输入', 'Enter a number between')} {request.min}~{request.max}
                 </p>
                 <button
                   onClick={e => { e.stopPropagation(); submitNumber(); }} disabled={busy}
                   className={`mt-2 w-full rounded-xl border py-2.5 text-sm font-semibold transition-all active:scale-[.98] disabled:opacity-50 ${a.btn}`}
                 >
-                  ✅ 确认
+                  ✅ {t('确认', 'Confirm')}
                 </button>
               </>
             ) : request.options.length === 0 ? (
               <p className="py-6 text-center text-sm text-text-secondary">
-                {request.id === 'equip' ? '目标没有任何装备' : request.id === 'redstone' ? '目标没有限时状态' : '没有可选项'}
+                {request.id === 'equip' ? t('目标没有任何装备', 'Target has no equipment')
+                  : request.id === 'redstone' ? t('目标没有限时状态', 'Target has no timed effect')
+                  : t('没有可选项', 'No options')}
               </p>
             ) : (
               <>
@@ -210,7 +214,7 @@ export default function ChoiceDialog({ request, onSubmit, onDismiss, onCancelSer
                             </div>
                             {o.sub && <div className="mt-0.5 text-xs text-text-secondary">{o.sub}</div>}
                           </div>
-                          {o.badge && <span className="shrink-0 rounded-md bg-card-border/15 px-1.5 py-0.5 text-[10px] text-text-secondary">{o.badge} 已选</span>}
+                          {o.badge && <span className="shrink-0 rounded-md bg-card-border/15 px-1.5 py-0.5 text-[10px] text-text-secondary">{o.badge} {t('已选', 'chosen')}</span>}
                         </button>
                         {/* 选中项为卡牌/buff 时：行内详情按钮 */}
                         {hasDetail && (
@@ -219,7 +223,7 @@ export default function ChoiceDialog({ request, onSubmit, onDismiss, onCancelSer
                             className={`absolute z-10 inline-flex items-center gap-1 rounded-lg border border-accent-shield/40 bg-card-bg/95 px-2 py-1 text-[10px] font-semibold text-accent-shield shadow-md backdrop-blur transition-all hover:bg-accent-shield/15 active:scale-95 ${grid ? 'right-1.5 top-1.5' : 'right-2 top-1/2 -translate-y-1/2'}`}
                           >
                             <span className="text-[11px] leading-none">📖</span>
-                            详情
+                            {t('详情', 'Details')}
                           </button>
                         )}
                       </div>

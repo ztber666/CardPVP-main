@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { BUFF_NAMES, BuffType } from '@shared/types';
+import { BuffType } from '@shared/types';
+import { buffDesc, buffName, useLang, useT } from '../i18n/i18n';
 
 // Buff 效果描述
 export const BUFF_DESCRIPTIONS: Record<string, string> = {
@@ -70,6 +71,8 @@ const SKIP_TYPES = [
 /** 状态图鉴内容（不含弹窗外壳），供 CollectionModal 组合使用 */
 export function BuffCollectionContent() {
   const [selected, setSelected] = useState<string | null>(null);
+  const lang = useLang();
+  const t = useT();
 
   const buffTypes = Object.values(BuffType).filter(
     t => !SKIP_TYPES.includes(t as BuffType)
@@ -80,8 +83,8 @@ export function BuffCollectionContent() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {buffTypes.map(type => {
           const iconNum = BUFF_ICON_MAP[type];
-          const name = BUFF_NAMES[type] || type;
-          const desc = BUFF_DESCRIPTIONS[type] || '';
+          const name = buffName(lang, type);
+          const desc = buffDesc(lang, type, BUFF_DESCRIPTIONS[type] || '', t('暂无描述', 'No description'));
           return (
             <div
               key={type}
@@ -109,13 +112,14 @@ export function BuffCollectionContent() {
       </div>
 
       <p className="text-center text-text-secondary text-xs mt-4">
-        共 {buffTypes.length} 种效果 · 点击展开详情
+        {t('共', 'Total')} {buffTypes.length} {t('种效果 · 点击展开详情', 'effects · click to expand')}
       </p>
     </>
   );
 }
 
 export default function BuffCollection({ onClose }: { onClose: () => void }) {
+  const t = useT();
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 backdrop-blur-sm overflow-y-auto py-8"
@@ -127,7 +131,7 @@ export default function BuffCollection({ onClose }: { onClose: () => void }) {
       >
         {/* 标题 */}
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-text-primary">效果图鉴</h2>
+          <h2 className="text-xl font-bold text-text-primary">{t('效果图鉴', 'Effects')}</h2>
           <button onClick={onClose} className="w-8 h-8 rounded-full border border-card-border flex items-center justify-center text-text-secondary hover:bg-card-bg/50 transition-colors">✕</button>
         </div>
 

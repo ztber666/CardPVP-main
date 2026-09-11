@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { CardDef } from '@shared/types';
+import { useT } from '../i18n/i18n';
 
 interface Props {
   card: CardDef;
@@ -26,6 +27,7 @@ export default function CardActionPanel({
   onDeselect,
   onBrewConvert,
 }: Props) {
+  const t = useT();
   const exhausted = isExhausted(card);
 
   const [target, setTarget] = useState<'opponent' | 'self'>(
@@ -65,7 +67,7 @@ export default function CardActionPanel({
         }`}
       >
         <span className="opacity-80">🔄</span>
-        {isOpponentTarget ? '敌方' : '自己'}
+        {isOpponentTarget ? t('敌方', 'Opponent') : t('自己', 'Self')}
       </button>
 
       {/* 主操作按钮 */}
@@ -78,7 +80,7 @@ export default function CardActionPanel({
             : 'bg-accent-heal/15 border-accent-heal/30 text-accent-heal hover:bg-accent-heal/25'
         }`}
       >
-        {isOpponentTarget ? '⚔️ 使用' : '💚 使用'}
+        {isOpponentTarget ? '⚔️ ' + t('使用', 'Use') : '💚 ' + t('使用', 'Use')}
       </button>
 
       {/* 转化按钮 */}
@@ -88,7 +90,7 @@ export default function CardActionPanel({
           disabled={pending}
           className={`${btnBase} bg-accent-buff/15 border border-accent-buff/30 text-accent-buff hover:bg-accent-buff/25`}
         >
-          🧪 转化
+          🧪 {t('转化', 'Convert')}
         </button>
       )}
 
@@ -98,7 +100,7 @@ export default function CardActionPanel({
         disabled={pending}
         className={`${btnBase} bg-white/5 border border-white/5 text-text-secondary hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30`}
       >
-        🗑️ 丢弃
+        🗑️ {t('丢弃', 'Discard')}
       </button>
 
       {/* 取消按钮 */}
@@ -106,7 +108,7 @@ export default function CardActionPanel({
         onClick={onDeselect}
         className={`${btnBase} bg-white/5 border border-white/5 text-text-secondary hover:bg-white/10`}
       >
-        ✕ 取消
+        ✕ {t('取消', 'Cancel')}
       </button>
     </div>
   );

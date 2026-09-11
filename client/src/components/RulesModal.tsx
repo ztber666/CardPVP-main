@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLang, useT } from '../i18n/i18n';
 
 /* ---------- 轻量 Markdown 渲染 ---------- */
 
@@ -187,17 +188,29 @@ function SimpleMarkdown({ content }: { content: string }) {
 
 export default function RulesModal({ onClose }: { onClose: () => void }) {
   const [content, setContent] = useState<string | null>(null);
+  const t = useT();
+  const lang = useLang();
 
   useEffect(() => {
-    // 运行时 fetch RULE.md，Vite dev server 会从 public 静态服务
-    fetch('/RULE.md')
-      .then(res => {
-        if (!res.ok) throw new Error('加载失败');
-        return res.text();
-      })
-      .then(setContent)
-      .catch(() => setContent('规则文档加载失败，请检查 RULE.md 是否位于 public 目录。'));
-  }, []);
+    // 按语言运行时 fetch 规则文档；英文缺失时回退中文 RULE.md
+    const files = lang === 'en' ? ['/RULE_EN.md', '/RULE.md'] : ['/RULE.md'];
+    let cancelled = false;
+    (async () => {
+      for (const f of files) {
+        try {
+          const res = await fetch(f);
+          if (res.ok) {
+            const text = await res.text();
+            if (!cancelled) setContent(text);
+            return;
+          }
+        } catch { /* 尝试下一个 */ }
+      }
+      if (!cancelled) setContent(t('规则文档加载失败，请检查 RULE.md 是否位于 public 目录。', 'Failed to load the rules document. Please check that the rules file exists.'));
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lang]);
 
   return (
     <div
@@ -210,7 +223,7 @@ export default function RulesModal({ onClose }: { onClose: () => void }) {
       >
         {/* 标题 */}
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-text-primary">游戏规则</h2>
+          <h2 className="text-xl font-bold text-text-primary">{t('游戏规则', 'Rules')}</h2>
           <button
             onClick={onClose}
             className="w-8 h-8 rounded-full border border-card-border flex items-center justify-center text-text-secondary hover:bg-card-bg/50 transition-colors"
@@ -221,7 +234,7 @@ export default function RulesModal({ onClose }: { onClose: () => void }) {
 
         {/* README 内容 */}
         {content === null ? (
-          <p className="text-text-secondary text-center py-8">加载中...</p>
+          <p className="text-text-secondary text-center py-8">{t('加载中...', 'Loading...')}</p>
         ) : (
           <SimpleMarkdown content={content} />
         )}

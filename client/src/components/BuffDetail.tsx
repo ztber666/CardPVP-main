@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { BuffType, BUFF_NAMES } from '@shared/types';
+import { BuffType } from '@shared/types';
 import { BUFF_DESCRIPTIONS, BUFF_ICON_MAP } from './BuffCollection';
 import SectionDivider from './SectionDivider';
+import { buffDesc, buffName, useLang, useT } from '../i18n/i18n';
 
 function getBuffImageUrl(buffType: BuffType): string | null {
   const iconNum = BUFF_ICON_MAP[buffType as string];
@@ -38,8 +39,10 @@ export default function BuffDetail({
   onClose,
 }: Props) {
   const url = getBuffImageUrl(buffType);
-  const name = BUFF_NAMES[buffType] || buffType;
-  const desc = BUFF_DESCRIPTIONS[buffType] || '暂无描述';
+  const lang = useLang();
+  const t = useT();
+  const name = buffName(lang, buffType);
+  const desc = buffDesc(lang, buffType, BUFF_DESCRIPTIONS[buffType] || '', t('暂无描述', 'No description'));
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -72,7 +75,7 @@ export default function BuffDetail({
 
         <button
           onClick={onClose}
-          aria-label="关闭"
+          aria-label={t('关闭', 'Close')}
           className="absolute top-3 right-3 z-10 w-8 h-8 flex items-center justify-center rounded-full bg-black/25 text-text-secondary/80 text-xl leading-none backdrop-blur-sm transition-all duration-300 hover:bg-black/50 hover:text-text-primary hover:rotate-90"
         >
           ×
@@ -103,13 +106,13 @@ export default function BuffDetail({
         {/* ── 状态区：堆叠 / 回合数据胶囊 ── */}
         {hasStats && (
           <section className="px-6 pt-1">
-            <SectionDivider label="状态" />
+            <SectionDivider label={t('状态', 'Status')} />
             <div className="flex flex-col gap-2">
               {/* 层数：叠圆点 + 数值 */}
               {stacks !== undefined && stacks > 1 && (
                 <StatRow
-                  label="叠加"
-                  valueText={`${stacks} 层`}
+                  label={t('叠加', 'Stacks')}
+                  valueText={`${stacks} ${t('层', 'layers')}`}
                   accent={
                     stacks >= MAX_STACK_DOTS
                       ? 'bg-red-400 shadow-[0_0_6px_rgba(248,113,113,0.7)]'
@@ -143,8 +146,8 @@ export default function BuffDetail({
 
                   return (
                     <StatRow
-                      label="剩余"
-                      valueText={`${remainingTurns} 回合`}
+                      label={t('剩余', 'Remaining')}
+                      valueText={`${remainingTurns} ${t('回合', 'turns')}`}
                       accent={
                         urgent
                           ? 'animate-pulse-fast bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.7)]'
@@ -182,10 +185,10 @@ export default function BuffDetail({
               ) : (
                 /* 无限期 buff */
                 <StatRow
-                  label="持续"
+                  label={t('持续', 'Duration')}
                   accent="bg-accent-shield"
                   valueText={<span className="text-lg leading-none">∞</span>}
-                  tail={<span className="text-xs text-text-secondary">无期限生效</span>}
+                  tail={<span className="text-xs text-text-secondary">{t('无期限生效', 'Active indefinitely')}</span>}
                 />
               )}
             </div>
@@ -194,7 +197,7 @@ export default function BuffDetail({
 
         {/* 描述 */}
         <section className="px-6 pt-1 pb-6">
-          <SectionDivider label="描述" />
+          <SectionDivider label={t('描述', 'Description')} />
           <div className="rounded-xl bg-black/25 border border-card-border/60 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
             <p className="text-[13px] leading-loose text-text-primary/90 antialiased max-h-36 overflow-y-auto">
               {desc}

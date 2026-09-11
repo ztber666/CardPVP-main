@@ -1,3 +1,5 @@
+import { useT } from '../i18n/i18n';
+
 interface Props {
   isMyTurn: boolean;
   pending: boolean;
@@ -9,6 +11,7 @@ interface Props {
 type TurnState = 'active' | 'pending' | 'waiting';
 
 export default function ActionBar({ isMyTurn, pending, onEndTurn, noMovesLeft = false }: Props) {
+  const t = useT();
   const state: TurnState = pending ? 'pending' : isMyTurn ? 'active' : 'waiting';
 
   /* 常态：幽灵描边退居辅助；无事可做：恢复实底高亮 */
@@ -46,7 +49,7 @@ export default function ActionBar({ isMyTurn, pending, onEndTurn, noMovesLeft = 
             state === 'active' ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'
           }`}
         >
-          结束出牌
+          {t('结束出牌', 'End Turn')}
         </span>
         <span
           className={`col-start-1 row-start-1 flex items-center gap-1.5 transition-all duration-200 text-text-primary ${
@@ -54,14 +57,14 @@ export default function ActionBar({ isMyTurn, pending, onEndTurn, noMovesLeft = 
           }`}
         >
           <span className="inline-block h-3 w-3 animate-spin rounded-full border-[1.5px] border-current border-t-transparent opacity-70" />
-          处理中
+          {t('处理中', 'Processing')}
         </span>
         <span
           className={`col-start-1 row-start-1 flex items-center gap-1.5 transition-all duration-200 text-text-secondary ${
             state === 'waiting' ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'
           }`}
         >
-          等待对方
+          {t('等待对方', 'Waiting')}
         </span>
       </span>
     </button>

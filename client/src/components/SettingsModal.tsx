@@ -1,24 +1,34 @@
-import { useSettingsStore, type PlayedCardHint } from '../store/settingsStore';
+import { useSettingsStore, type PlayedCardHint, type AppLang } from '../store/settingsStore';
+import { useT } from '../i18n/i18n';
 
 /* ---------- 设置弹窗 ---------- */
 export default function SettingsModal({ onClose }: { onClose: () => void }) {
+  const t = useT();
   const cardOverlayDuration = useSettingsStore((s) => s.cardOverlayDuration);
   const setCardOverlayDuration = useSettingsStore((s) => s.setCardOverlayDuration);
   const playedCardHint = useSettingsStore((s) => s.playedCardHint);
   const setPlayedCardHint = useSettingsStore((s) => s.setPlayedCardHint);
+  const lang = useSettingsStore((s) => s.lang);
+  const setLang = useSettingsStore((s) => s.setLang);
 
   // 打出提示时长档位
   const overlayOptions = [
-    { label: '快', value: 3000 },
-    { label: '中', value: 5000 },
-    { label: '慢', value: 7000 },
+    { label: t('快', 'Fast'), value: 3000 },
+    { label: t('中', 'Normal'), value: 5000 },
+    { label: t('慢', 'Slow'), value: 7000 },
   ];
-  const currentOverlayLabel = overlayOptions.find(o => o.value === cardOverlayDuration)?.label ?? '中';
+  const currentOverlayLabel = overlayOptions.find(o => o.value === cardOverlayDuration)?.label ?? t('中', 'Normal');
+
+  // 语言选项
+  const langOptions: { label: string; value: AppLang }[] = [
+    { label: '中文', value: 'zh' },
+    { label: 'English', value: 'en' },
+  ];
 
   // 打出牌提示形式
   const hintOptions: { label: string; value: PlayedCardHint; desc: string }[] = [
-    { label: '卡片', value: 'card', desc: '弹出完整卡牌动画' },
-    { label: '提示框', value: 'toast', desc: '用消息框显示文字+卡图' },
+    { label: t('卡片', 'Card'), value: 'card', desc: t('弹出完整卡牌动画', 'Show the full card animation') },
+    { label: t('提示框', 'Toast'), value: 'toast', desc: t('用消息框显示文字+卡图', 'Show text and image in a message box') },
   ];
 
   return (
@@ -32,7 +42,7 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
       >
         {/* 标题 */}
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-text-primary">设置</h2>
+          <h2 className="text-xl font-bold text-text-primary">{t('设置', 'Settings')}</h2>
           <button
             onClick={onClose}
             className="w-8 h-8 rounded-full border border-card-border flex items-center justify-center text-text-secondary hover:bg-card-bg/50 transition-colors"
@@ -41,14 +51,37 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
+        {/* ===== 语言 ===== */}
+        <div className="mb-6">
+          <h3 className="text-sm font-semibold text-text-secondary mb-3">{t('语言', 'Language')}</h3>
+          <div className="flex items-center justify-between bg-page-bg/60 border border-card-border/50 rounded-xl px-3 py-2.5">
+            <span className="text-sm text-text-primary">{t('界面语言', 'UI language')}</span>
+            <div className="flex items-center gap-1">
+              {langOptions.map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => setLang(opt.value)}
+                  className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                    lang === opt.value
+                      ? 'bg-accent-shield/25 border border-accent-shield/40 text-accent-shield'
+                      : 'bg-transparent border border-transparent text-text-secondary hover:bg-card-bg/60'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
         {/* ===== 打出表现 ===== */}
         <div>
-          <h3 className="text-sm font-semibold text-text-secondary mb-3">打出表现</h3>
+          <h3 className="text-sm font-semibold text-text-secondary mb-3">{t('打出表现', 'Playback')}</h3>
 
           {/* 打出牌提示形式 */}
           <div className="mb-4">
             <div className="flex items-center justify-between bg-page-bg/60 border border-card-border/50 rounded-xl px-3 py-2.5 mb-1">
-              <span className="text-sm text-text-primary">打出牌提示</span>
+              <span className="text-sm text-text-primary">{t('打出牌提示', 'Played-card hint')}</span>
               <div className="flex items-center gap-1">
                 {hintOptions.map(opt => (
                   <button
@@ -72,7 +105,7 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
 
           {/* 打出提示时长 */}
           <div className="flex items-center justify-between bg-page-bg/60 border border-card-border/50 rounded-xl px-3 py-2.5 mb-1">
-            <span className="text-sm text-text-primary">打出提示时长</span>
+            <span className="text-sm text-text-primary">{t('打出提示时长', 'Hint duration')}</span>
             <div className="flex items-center gap-1">
               {overlayOptions.map(opt => (
                 <button
@@ -90,7 +123,7 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
             </div>
           </div>
           <p className="text-[11px] text-text-secondary/60 mt-1">
-            当前：{currentOverlayLabel}（{cardOverlayDuration}ms）
+            {t('当前', 'Current')}：{currentOverlayLabel}（{cardOverlayDuration}ms）
           </p>
         </div>
       </div>

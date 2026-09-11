@@ -43,8 +43,8 @@ function serveRootFiles(): PluginOption {
         }
 
         // /RULE.md → 从根目录读取
-        if (url === '/RULE.md' || url === '/RULE') {
-          const filePath = path.join(rootDir, 'RULE.md')
+        if (url === '/RULE.md' || url === '/RULE' || url === '/RULE_EN.md') {
+          const filePath = path.join(rootDir, url.split('/').pop() || 'RULE.md')
           if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
             res.setHeader('Content-Type', 'text/markdown; charset=utf-8')
             fs.createReadStream(filePath).pipe(res)

@@ -148,7 +148,9 @@ export function initGame(state: GameState): GameState {
 
 // ===== 刷新装备效果 ===== 
 function refreshEquipment(player: PlayerState): PlayerState { 
-  const p = deepClone(player); 
+  // 原地刷新：必须与 s.players[i] 保持同一引用，否则紧随其后的 drawCards 触发的
+  // 爆牌弃牌（discardFromHand(s, ...) 按 id 在 s.players 中定位）会落到旧对象上而丢失
+  const p = player; 
   // 重置加成字段 
   p.handLimitBonus = 0; 
   p.actionLimitBonus = 0; 
@@ -366,12 +368,6 @@ export function endTurn(state: GameState): GameState {
   s.durationTickCounter = ((s.durationTickCounter || 0) + 1) % 2; 
   if (s.durationTickCounter === 0) { 
     s.turnNumber += 1; 
-    log.push({ 
-      playerId: s.players[s.currentTurnIndex].id,
-      message: `第${s.turnNumber}回合开始`, 
-      timestamp: Date.now(), 
-      type: 'endTurn', 
-    }); 
   } 
   s.log.push(...log);
   trimLog(s);
@@ -524,6 +520,11 @@ export function triggerEnchantBurst(s: GameState, player: PlayerState, card: Car
   Object.assign(player, np);
   Object.assign(opponent ?? oppSlot, result.gameState.players[1 - playerIdx]);
   Object.assign(s, result.gameState);
+  // Object.assign(s, ...) 会把 s.players 整体替换成结算结果里的克隆数组，
+  // 必须把 live 引用补回槽位，否则调用方（discardFromHand/玻璃板递归）持有的
+  // player/opponent 立即与 s.players 脱钩，后续副作用全部丢失
+  s.players[playerIdx] = player;
+  s.players[1 - playerIdx] = opponent ?? oppSlot;
 
   s.log.push({
     playerId: s.players[s.currentTurnIndex].id,
@@ -550,8 +551,8 @@ export function triggerDiscardEvents(player: PlayerState, card: CardDef, s: Game
   const target = findOpponent(s, player.id);
   // 仙人掌：丢弃时触发效果，摸1张牌
   if (card.name === '仙人掌') {
-    const updated = drawCards(player, 1, s, target);
-    Object.assign(player, updated);
+    // drawCards 已原地化（返回同一引用），摸牌与爆牌弃牌直接作用在 player 上
+    drawCards(player, 1, s, target);
       log.push({
         playerId: s.players[s.currentTurnIndex].id,
         message: `${player.name}丢弃了仙人掌，触发效果摸了1张牌`,
@@ -655,11 +656,14 @@ export function triggerDiscardEvents(player: PlayerState, card: CardDef, s: Game
 
 // ===== 丢弃手牌 ===== 
 export function discardFromHand(state: GameState, playerId: string, cardId: string, targetId?: string): GameState { 
-  let s = deepClone(state); 
+  // 原地修改：出牌/摸牌/弃牌链路只允许 applyCard 开头那一次 deepClone，
+  // 这里直接操作传入的 state 并返回同一引用，调用方（handleHandLimit / 玻璃板递归 /
+  // rooms.ts）持有的 live 引用继续有效，弃牌副作用不再被返回值覆盖丢失。
+  const s = state; 
   const idx = s.players.findIndex(p => p.id === playerId); 
   if (idx === -1) return s; 
-  let player = s.players[idx]; 
-  let target = s.players[1 - idx]; 
+  const player = s.players[idx]; 
+  const target = s.players[1 - idx]; 
   const cardIdx = player.hand.findIndex(c => c.id === cardId); 
   if (cardIdx === -1) return s; 
   const [card] = player.hand.splice(cardIdx, 1); 
@@ -672,8 +676,6 @@ export function discardFromHand(state: GameState, playerId: string, cardId: stri
     // 触发丢弃事件（仙人掌摸牌、烈焰棒、绑定诅咒等）
     // 魔咒爆发已生效，传 true 跳过 triggerDiscardEvents 内的魔咒爆发判定，防止同一次丢弃重复消耗层数
     triggerDiscardEvents(player, card, s, true, log);
-    s.players[idx] = player;
-    s.players[1 - idx] = target;
     // P0-4：丢弃链路可能致死（绑定诅咒/烈焰棒/幽匿尖啸体），补统一胜负判定
     checkGameOver(s);
     trimLog(s);
@@ -686,8 +688,6 @@ export function discardFromHand(state: GameState, playerId: string, cardId: stri
 
   // 触发丢弃事件（仙人掌摸牌、烈焰棒、绑定诅咒等）
   triggerDiscardEvents(player, card, s, undefined, log); 
-  s.players[idx] = player; 
-  s.players[1 - idx] = target; 
   const segments: ContentSegment[] = 
     [{ type: 'text', text: `${player.name}丢弃了`, bold: true },
      { type: 'card', cardId: card.id }];

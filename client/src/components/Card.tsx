@@ -1,5 +1,7 @@
-import { CardDef, CostType, COST_TYPE_NAMES } from '@shared/types';
+import { CardDef, CostType } from '@shared/types';
 import { getCardImageUrl } from '../utils/cardImage';
+import { cardText, useLang } from '../i18n/i18n';
+import { EN_COST_SHORT } from '../i18n/i18n';
 
 interface Props {
   card: CardDef;
@@ -56,6 +58,10 @@ const COST_TYPE_LABELS: Record<string, string> = {
 };
 
 export default function Card({ card, compact, disabled, dimmed, selected, onClick, hidden, played }: Props) {
+  const lang = useLang();
+  const { name: displayName, description: displayDesc } = cardText(lang, card);
+  const costLabel = (ct: CostType) => (lang === 'en' ? EN_COST_SHORT[ct] : COST_TYPE_LABELS[ct]) || COST_TYPE_LABELS[CostType.Action];
+
   // 卡背
   if (hidden) {
     return (
@@ -86,10 +92,10 @@ export default function Card({ card, compact, disabled, dimmed, selected, onClic
                 : 'cursor-pointer hover:shadow-xl hover:border-card-border/80'
           }`}
       >
-        <img src={imgUrl} alt={card.name} className="w-9 h-9 sm:w-10 sm:h-10 object-contain mt-0.5" style={{ imageRendering: 'pixelated' }} />
-        <span className="text-[10px] sm:text-xs font-semibold text-text-primary leading-tight text-center line-clamp-2 px-0.5">{card.name}</span>
+        <img src={imgUrl} alt={displayName} className="w-9 h-9 sm:w-10 sm:h-10 object-contain mt-0.5" style={{ imageRendering: 'pixelated' }} />
+        <span className="text-[10px] sm:text-xs font-semibold text-text-primary leading-tight text-center line-clamp-2 px-0.5">{displayName}</span>
         <span className={`px-1.5 py-[0.5px] rounded text-[8px] sm:text-[9px] font-medium ${badgeCls}`}>
-          {COST_TYPE_LABELS[card.costType]}
+          {costLabel(card.costType)}
         </span>
         {/* 选中指示器 */}
         {selected && (
@@ -106,13 +112,13 @@ export default function Card({ card, compact, disabled, dimmed, selected, onClic
   // ===== 完整模式（详情用） =====
   return (
     <div className={`w-32 h-44 bg-card-bg border border-card-border rounded-xl flex flex-col items-center justify-between p-3 shadow-card select-none border-l-[4px] ${borderCls}`}>
-      <img src={imgUrl} alt={card.name} className="w-12 h-12 object-contain mt-1" style={{ imageRendering: 'pixelated' }} />
-      <span className="text-sm font-semibold text-text-primary text-center">{card.name}</span>
+      <img src={imgUrl} alt={displayName} className="w-12 h-12 object-contain mt-1" style={{ imageRendering: 'pixelated' }} />
+      <span className="text-sm font-semibold text-text-primary text-center">{displayName}</span>
       <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${badgeCls}`}>
-        {COST_TYPE_LABELS[card.costType]}
+        {costLabel(card.costType)}
       </span>
       <span className="text-[10px] text-text-secondary text-center leading-tight">
-        {card.description}
+        {displayDesc}
       </span>
     </div>
   );

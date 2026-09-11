@@ -5,8 +5,10 @@ import Lobby from './pages/Lobby';
 import RoomList from './pages/RoomList';
 import WaitingRoom from './pages/WaitingRoom';
 import Game from './pages/Game';
+import { useT } from './i18n/i18n';
 
 export default function App() {
+  const t = useT();
   const { connect, disconnect } = useSocket();
   const { connected, player, gameState, waitingForOpponent, page } = useGameStore();
 
@@ -71,7 +73,7 @@ export default function App() {
       {/* 连接状态指示器 */}
       <div className="fixed bottom-4 right-4 flex items-center gap-2 text-xs z-10">
         <span className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`} />
-        <span className="text-text-secondary">{connected ? '已连接' : '未连接'}</span>
+        <span className="text-text-secondary">{connected ? t('已连接', 'Connected') : t('未连接', 'Disconnected')}</span>
       </div>
     </div>
   );
