@@ -844,11 +844,23 @@ export function applyCard(
     // 获得当回合不增加 enchantBurstReady，回合结束时才转为可用
   }
 
-  // 运输矿车：从牌组抽4张牌展示，双方轮流选
+  // 运输矿车：从牌堆抽5张牌展示，双方轮流选
+  // 不消耗牌堆：摸牌本身就是「有放回」地随机抽取、牌堆从不减少，运输矿车若再把牌从牌堆里
+  // splice 掉，就会一边掏空牌堆一边与摸牌语义不一致（且会把空牌堆暴露给 drawCards）。这里只
+  // 在临时副本上取样、不动物牌堆。
+  // 取"随机5张"而不是 slice(0,5)：牌堆只在开局洗过一次且从不消耗，取前 5 张会每次都是同一批。
   if (card.name === '运输矿车') {
     if (p.deck.length >= 5) {
-      const deckCards = p.deck.splice(0, 5);
-      p.draftCards = deckCards.map(c => JSON.parse(JSON.stringify(c)));
+      const pool = p.deck.slice();
+      const picked: CardDef[] = [];
+      for (let i = 0; i < 5; i++) {
+        // 只在临时副本上取样：同一个牌堆条目不会被抽两次
+        // （有多个份数的同名卡仍可能同时出现在这 5 张里，与旧 splice 行为一致）
+        picked.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+      }
+      // 深拷贝 + 唯一实例 id：牌堆条目可以被重复抽到，直接沿用牌堆条目的 id（card_20_3）
+      // 会让不同批次/不同来源的手牌 id 冲突（removeFromHand、discardFromHand、React key 都按 id 定位）
+      p.draftCards = picked.map(c => ({ ...deepClone(c), id: generateCardInstanceId(getTemplateCardId(c.id), 'draft') }));
       p.draftPlayerPick = 0; // 当前玩家先选
       p.draftPickCount = 0;
     }
