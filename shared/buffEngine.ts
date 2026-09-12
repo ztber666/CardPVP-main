@@ -99,7 +99,10 @@ export function processTurnStartBuffs(player: PlayerState, opponent: PlayerState
   const selfDamage = getBuffStacks(p, BuffType.Damage, p.id);
   if(selfDamage > 0) {
     const dealt = damage(p, p, DamageType.Real, selfDamage, state);
-    showTrigger([{ type: 'buff', buffType: BuffType.Damage }], 'all');
+    showTrigger([
+      { type: 'buff', buffType: BuffType.Damage },
+      { type: 'text', text: `：${p.name}受到${dealt}点魔法伤害` }
+    ], 'all');
     appendLog(state, [
       { type: 'text', text: `龙息：${p.name}受到${dealt}点魔法伤害` },
       { type: 'buff', buffType: BuffType.Damage },
@@ -121,7 +124,10 @@ export function processTurnStartBuffs(player: PlayerState, opponent: PlayerState
       ]);
     } else {
       const dealt = damage(p, p, DamageType.Physical, selfHorde, state);
-      showTrigger([{ type: 'buff', buffType: BuffType.Horde }], 'all');
+      showTrigger([
+        { type: 'buff', buffType: BuffType.Horde },
+        { type: 'text', text: `${p.name}受到${dealt}点物理伤害` }
+      ], 'all');
       appendLog(state, [
         { type: 'text', text: `尸潮：${p.name}受到${dealt}点物理伤害` },
         { type: 'buff', buffType: BuffType.Horde },
@@ -132,7 +138,10 @@ export function processTurnStartBuffs(player: PlayerState, opponent: PlayerState
   const selfHeal = getBuffStacks(p, BuffType.Heal, p.id);
   if(selfHeal > 0) {
     const healed = heal(p, p, selfHeal, state, opponent);
-    showTrigger([{ type: 'buff', buffType: BuffType.Heal }], 'all');
+    showTrigger([
+      { type: 'buff', buffType: BuffType.Heal },
+      { type: 'text', text: `${p.name}回复${healed}点血量` }
+    ], 'all');
     appendLog(state, [
       { type: 'text', text: `生命回复：${p.name}回复${healed}点血量` },
       { type: 'buff', buffType: BuffType.Heal },
@@ -144,7 +153,10 @@ export function processTurnStartBuffs(player: PlayerState, opponent: PlayerState
   const outDamage = getBuffStacks(opponent, BuffType.Damage, p.id);
   if(outDamage > 0) {
     const dealt = damage(p, opponent, DamageType.Real, outDamage, state);
-    showTrigger([{ type: 'buff', buffType: BuffType.Damage }], 'all');
+    showTrigger([
+      { type: 'buff', buffType: BuffType.Damage },
+      { type: 'text', text: `${opponent.name}受到${dealt}点魔法伤害` }
+    ], 'all');
     appendLog(state, [
       { type: 'text', text: `龙息：${opponent.name}受到${dealt}点魔法伤害` },
       { type: 'buff', buffType: BuffType.Damage },
@@ -154,7 +166,10 @@ export function processTurnStartBuffs(player: PlayerState, opponent: PlayerState
   const outHorde = getBuffStacks(opponent, BuffType.Horde, p.id);
   if(outHorde > 0) {
     const dealt = damage(p, opponent, DamageType.Physical, outHorde, state);
-    showTrigger([{ type: 'buff', buffType: BuffType.Horde }], 'all');
+    showTrigger([
+      { type: 'buff', buffType: BuffType.Horde },
+      { type: 'text', text: `${opponent.name}受到${dealt}点物理伤害` }
+    ], 'all');
     appendLog(state, [
       { type: 'text', text: `尸潮：${opponent.name}受到${dealt}点物理伤害` },
       { type: 'buff', buffType: BuffType.Horde },
@@ -164,7 +179,10 @@ export function processTurnStartBuffs(player: PlayerState, opponent: PlayerState
   const outHeal = getBuffStacks(opponent, BuffType.Heal, p.id);
   if(outHeal > 0) {
     const healed = heal(p, opponent, outHeal, state, p);
-    showTrigger([{ type: 'buff', buffType: BuffType.Heal }], 'all');
+    showTrigger([
+      { type: 'buff', buffType: BuffType.Heal },
+      { type: 'text', text: `${opponent.name}回复${healed}点血量` }
+    ], 'all');
     appendLog(state, [
       { type: 'text', text: `生命回复：${opponent.name}回复${healed}点血量` },
       { type: 'buff', buffType: BuffType.Heal },

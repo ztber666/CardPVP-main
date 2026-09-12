@@ -656,10 +656,19 @@ export function applyCard(
         // 原逻辑也是找到索引后直接丢弃，因为 findIndex 返回的是第一个匹配项，相当于在匹配的牌中随机选了一张
         const [discarded] = target.hand.splice(discardCandidateIdx, 1);
         discardFromHand(state, target.id, discarded.id);
+        showTrigger([
+          { type: 'player', playerId: target.id },
+          { type: 'text', text: `丢弃了` },
+          { type: 'card', cardId: discarded.id },
+        ], 'all');
     } else {
         // 否则给予尸潮并造成伤害
         applyEffectToPlayer(target, BuffType.Horde, 4, 2, card.id, state, p.id);
         damage(p, target, DamageType.Physical, 4, state);
+        showTrigger([
+          { type: 'player', playerId: target.id },
+          { type: 'text', text: `没有攻击牌` },
+        ], 'all');
     }
 
     } else if (effect.buffType === BuffType.DrawCard) {

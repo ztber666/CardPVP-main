@@ -76,6 +76,13 @@ export function createLog(state: GameState, playerId: string, type: GameLogType,
         { type: 'card', cardId: payload.cardId },
       ]);
       break;
+    case 'endAction':
+      // Handle EndActionPayload
+      content.push([
+        { type: 'player', playerId, bold: true },
+        { type: 'text', text: `结束了行动`, bold: true },
+      ]);
+      break;
   }
   state.log.push({
     playerId,
@@ -1007,11 +1014,6 @@ export function handleBrewConversion(state: GameState, playerId: string, cardId:
   if (!template) return s; 
   // 用确定性实例 ID（randomUUID），避免 Date.now 碰撞/非确定
   player.hand[cardIdx] = { ...template, id: generateCardInstanceId(template.id, 'brew') }; 
-  appendLog(s, [
-    { type: 'text', text: `将` },
-    { type: 'card', cardId: card.id },
-    { type: 'text', text: `转化为${targetName}` },
-  ]);
   return s; 
 }
 

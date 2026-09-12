@@ -36,7 +36,7 @@ export default function SegmentDetailImage({ segment, className = '' }: Props) {
         <img
           src={getCardImageUrl(cardId)}
           alt=""
-          className={`w-5 h-5 object-contain shrink-0 inline-block align-middle rounded-sm p-[2px] ring-1 ring-card-border/60 bg-card-bg/40 ${
+          className={`w-[18px] h-[18px] align-[-4px] object-contain shrink-0 inline-block rounded-sm p-[1px] ring-1 ring-card-border/70 bg-card-bg/60 ${
             card
               ? 'cursor-pointer transition-all duration-150 hover:scale-110 hover:ring-accent-shield/50 hover:bg-accent-shield/10 hover:ring-offset-0'
               : 'opacity-80'

@@ -150,7 +150,7 @@ npm run dev
 CardPVP/
 ├── client/                  # 前端 React 应用
 │   └── src/
-│       ├── components/      # UI 组件（手牌、Buff、卡牌详情、日志等）
+│       ├── components/      # UI 组件（手牌、Buff、卡牌详情、分层战斗记录等）
 │       ├── pages/           # 页面（Lobby 大厅、Game 对战）
 │       ├── hooks/           # 自定义 Hooks（Socket 连接）
 │       ├── store/           # Zustand 状态管理
