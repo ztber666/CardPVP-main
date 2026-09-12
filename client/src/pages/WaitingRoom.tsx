@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { useSocket } from '../hooks/useSocket';
 import { useGameStore } from '../store/gameStore';
+import { useSettingsStore } from '../store/settingsStore';
 import { useIsLandscape } from '../hooks/useOrientation';
 import { displayMessage } from '../store/notificationStore';
 import { useT } from '../i18n/i18n';
@@ -9,6 +10,7 @@ export default function WaitingRoom() {
   const t = useT();
   const { leaveRoom, updateName } = useSocket();
   const { player } = useGameStore();
+  const setNickname = useSettingsStore((s) => s.setNickname);
   const isLandscape = useIsLandscape();
 
   const roomId = player?.roomId ?? '';
@@ -80,6 +82,9 @@ export default function WaitingRoom() {
       setNameSaving(false);
       if (!result.success) {
         displayMessage(result.error || t('昵称更新失败', 'Failed to update nickname'));
+      } else {
+        // 与「设置」中的昵称保持同步，下次创建/加入房间直接复用
+        setNickname(trimmed);
       }
     }, 800);
   };

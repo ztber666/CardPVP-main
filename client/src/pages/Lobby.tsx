@@ -1,22 +1,42 @@
 import { useState } from 'react';
 import { useGameStore } from '../store/gameStore';
+import { useSettingsStore, normalizeNickname } from '../store/settingsStore';
 import { useIsLandscape } from '../hooks/useOrientation';
 import CollectionModal from '../components/CollectionModal';
 import RulesModal from '../components/RulesModal';
 import SettingsModal from '../components/SettingsModal';
+import NicknameModal from '../components/NicknameModal';
 import { useT } from '../i18n/i18n';
 
 export default function Lobby() {
   const t = useT();
   const { connected } = useGameStore();
+  const nickname = useSettingsStore((s) => s.nickname);
+  const setNickname = useSettingsStore((s) => s.setNickname);
   const isLandscape = useIsLandscape();
   const [showCollection, setShowCollection] = useState(false);
   const [showRules, setShowRules] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  // 未设置昵称时点击「开始」弹出的创建昵称提示
+  const [showNicknamePrompt, setShowNicknamePrompt] = useState(false);
 
   const handleStart = () => {
+    // 没有昵称先提示创建，创建成功后再进入房间列表
+    if (!normalizeNickname(nickname)) {
+      setShowNicknamePrompt(true);
+      return;
+    }
     useGameStore.getState().setPage('roomList');
   };
+
+  // 创建昵称并进入房间列表
+  const handleNicknameConfirm = (name: string) => {
+    setNickname(name);
+    setShowNicknamePrompt(false);
+    useGameStore.getState().setPage('roomList');
+  };
+
+  const currentNickname = normalizeNickname(nickname);
 
   // 按钮公共样式
   const btnBase = 'w-full py-4 rounded-2xl font-semibold text-lg transition-all duration-200 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed';
@@ -40,6 +60,12 @@ export default function Lobby() {
       >
         ⚔️ {t('开始', 'Start')}
       </button>
+      {/* 当前昵称（未设置时提示点击开始创建） */}
+      <p className="text-center text-xs text-text-secondary/70 -mt-1">
+        {currentNickname
+          ? `${t('昵称', 'Nickname')}：${currentNickname}`
+          : t('尚未设置昵称，点击开始创建', 'No nickname yet — click Start to create one')}
+      </p>
       <button
         onClick={() => setShowRules(true)}
         className={`${btnBase} bg-card-bg border-2 border-card-border text-text-primary hover:border-accent-shield/30 hover:bg-card-bg/80`}
@@ -84,6 +110,16 @@ export default function Lobby() {
       )}
       {showSettings && (
         <SettingsModal onClose={() => setShowSettings(false)} />
+      )}
+      {showNicknamePrompt && (
+        <NicknameModal
+          initial={nickname}
+          title={t('创建昵称', 'Create nickname')}
+          desc={t('还没有昵称，先创建一个吧，创建房间时会使用它。', 'No nickname yet — create one first; it will be used when you create a room.')}
+          confirmText={t('保存并开始', 'Save & Start')}
+          onConfirm={handleNicknameConfirm}
+          onClose={() => setShowNicknamePrompt(false)}
+        />
       )}
     </div>
   );

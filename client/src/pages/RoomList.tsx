@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSocket, type RoomInfo } from '../hooks/useSocket';
 import { useGameStore } from '../store/gameStore';
+import { useSettingsStore, normalizeNickname, NICKNAME_MAX_LENGTH } from '../store/settingsStore';
 import { useIsLandscape } from '../hooks/useOrientation';
+import NicknameModal from '../components/NicknameModal';
 import { displayMessage } from '../store/notificationStore';
 import { useLang, useT, type AppLang } from '../i18n/i18n';
 
@@ -54,16 +56,21 @@ export default function RoomList() {
     return params.get('room')?.toUpperCase() || '';
   });
   const [rooms, setRooms] = useState<RoomInfo[]>([]);
-  const [playerName, setPlayerName] = useState('');
+  // 昵称统一由全局设置维护（设置弹窗 / 大厅创建），这里直接读写 store
+  const nickname = useSettingsStore((s) => s.nickname);
+  const setNickname = useSettingsStore((s) => s.setNickname);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(REFRESH_INTERVAL);
+
+  // 未设置昵称却要创建房间时，先弹窗创建（创建完成后再继续建房）
+  const [showNicknamePrompt, setShowNicknamePrompt] = useState(false);
 
   // 重连校验弹窗
   const [verifyRoom, setVerifyRoom] = useState<RoomInfo | null>(null);
   const [verifyName, setVerifyName] = useState('');
 
-  const displayName = playerName.trim() || String.fromCodePoint(0x1F600 + Math.floor(Math.random() * 0x50));
+  const displayName = normalizeNickname(nickname) || String.fromCodePoint(0x1F600 + Math.floor(Math.random() * 0x50));
 
 
   // 拉取房间列表
@@ -98,18 +105,34 @@ export default function RoomList() {
     setCountdown(REFRESH_INTERVAL);
   };
 
-  // 创建房间
+  // 创建房间（先确保已有昵称）
   const handleCreate = async () => {
     if (!connected) return;
+    if (!normalizeNickname(nickname)) {
+      setShowNicknamePrompt(true);
+      return;
+    }
+    await doCreate();
+  };
+
+  // 实际调用 createRoom —— 使用设置里的昵称（name 参数用于刚创建昵称、store 尚未重渲染的场景）
+  const doCreate = async (name?: string) => {
     setLoading(true);
     setError(null);
     try {
-      await createRoom(displayName);
+      await createRoom(normalizeNickname(name ?? nickname) || displayName);
     } catch (e: any) {
       setError(e.message || t('创建房间失败', 'Failed to create room'));
     } finally {
       setLoading(false);
     }
+  };
+
+  // 昵称创建完成（保存到设置后继续建房）
+  const handleNicknameConfirm = (name: string) => {
+    setNickname(name);
+    setShowNicknamePrompt(false);
+    doCreate(name);
   };
 
   // 随机加入 — 只选「等待加入」状态的房间
@@ -253,15 +276,27 @@ export default function RoomList() {
     </button>
   );
 
-  // 昵称输入
+  // 昵称输入（与「设置」中的昵称同一份数据）
   const NameInput = (
     <input
       type="text"
-      placeholder={t('输入昵称（可选）', 'Nickname (optional)')}
-      value={playerName}
-      onChange={(e) => setPlayerName(e.target.value)}
+      placeholder={t('输入昵称', 'Nickname')}
+      value={nickname}
+      onChange={(e) => setNickname(e.target.value)}
       className="w-full bg-card-bg border border-card-border rounded-xl px-3 py-2.5 text-sm text-text-primary placeholder-text-secondary/50 outline-none focus:border-accent-shield/50 transition-colors"
-      maxLength={12}
+      maxLength={NICKNAME_MAX_LENGTH}
+    />
+  );
+
+  // 昵称创建弹窗（创建后自动继续建房）
+  const NicknamePromptModal = showNicknamePrompt && (
+    <NicknameModal
+      initial={nickname}
+      title={t('创建昵称', 'Create nickname')}
+      desc={t('创建房间需要先设置昵称，对手也能看到它。', 'Creating a room requires a nickname; your opponent will see it too.')}
+      confirmText={t('保存并创建', 'Save & Create')}
+      onConfirm={handleNicknameConfirm}
+      onClose={() => setShowNicknamePrompt(false)}
     />
   );
 
@@ -370,6 +405,7 @@ export default function RoomList() {
           </div>
         </div>
         {VerifyModal}
+        {NicknamePromptModal}
       </>
     );
   }
@@ -434,6 +470,7 @@ export default function RoomList() {
         </div>
       </div>
       {VerifyModal}
+      {NicknamePromptModal}
     </>
   );
 }

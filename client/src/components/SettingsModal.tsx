@@ -1,9 +1,11 @@
-import { useSettingsStore, type PlayedCardHint, type AppLang } from '../store/settingsStore';
+import { useSettingsStore, type PlayedCardHint, type AppLang, NICKNAME_MAX_LENGTH } from '../store/settingsStore';
 import { useT } from '../i18n/i18n';
 
 /* ---------- 设置弹窗 ---------- */
 export default function SettingsModal({ onClose }: { onClose: () => void }) {
   const t = useT();
+  const nickname = useSettingsStore((s) => s.nickname);
+  const setNickname = useSettingsStore((s) => s.setNickname);
   const cardOverlayDuration = useSettingsStore((s) => s.cardOverlayDuration);
   const setCardOverlayDuration = useSettingsStore((s) => s.setCardOverlayDuration);
   const playedCardHint = useSettingsStore((s) => s.playedCardHint);
@@ -49,6 +51,22 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
           >
             ✕
           </button>
+        </div>
+
+        {/* ===== 昵称 ===== */}
+        <div className="mb-6">
+          <h3 className="text-sm font-semibold text-text-secondary mb-3">{t('昵称', 'Nickname')}</h3>
+          <input
+            type="text"
+            placeholder={t('输入昵称', 'Enter nickname')}
+            value={nickname}
+            onChange={(e) => setNickname(e.target.value)}
+            maxLength={NICKNAME_MAX_LENGTH}
+            className="w-full bg-page-bg/60 border border-card-border/50 rounded-xl px-3 py-2.5 text-sm text-text-primary placeholder-text-secondary/50 outline-none focus:border-accent-shield/50 transition-colors"
+          />
+          <p className="text-[11px] text-text-secondary/60 mt-1">
+            {t('创建或加入房间时会使用这个昵称，对手也能看到。', 'Used when creating or joining a room, and visible to your opponent.')}
+          </p>
         </div>
 
         {/* ===== 语言 ===== */}
