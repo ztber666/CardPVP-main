@@ -8,42 +8,17 @@ interface Props {
   myName: string;
 }
 
-/** 根据当前回合视角处理文本前缀 */
-function getDisplayText(segment: ContentSegment, isMyTurn: boolean): string {
-  const rawText = segment.text || '';
-
-  if (isMyTurn) {
-    if (rawText.startsWith('自己')) {
-      return `你${rawText.slice(2)}`;
-    }
-    return rawText;
-  }
-
-  // 对方视角
-  if (rawText.startsWith('对方')) {
-    return `你${rawText.slice(2)}`;
-  }
-
-  if (rawText.startsWith('自己')) {
-    return `对方${rawText.slice(2)}`;
-  }
-
-  return rawText;
-}
-
 /** 渲染单个内容段 */
 function SegmentRenderer({ segment, isMyTurn, myName }: { segment: ContentSegment; isMyTurn: boolean; myName: string }) {
   switch (segment.type) {
     case 'text': {
-      const displayText = getDisplayText(segment, isMyTurn);
-
       return (
         <span
           className={`text-xs leading-5 text-text-secondary ${
             segment.bold ? 'font-bold text-text-primary' : ''
           }`}
         >
-          {displayText}
+          {segment.text}
         </span>
       );
     }

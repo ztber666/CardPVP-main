@@ -4,6 +4,7 @@ import { getCardImageUrl } from '../utils/cardImage';
 import { BUFF_ICON_MAP } from '../components/BuffCollection';
 import { useSettingsStore } from '../store/settingsStore';
 import { buffName, cardNameForTemplate, txt, type AppLang } from '../i18n/i18n';
+import { logEntryPlainText } from '../utils/logText';
 
 // ===== 唯一的数据模型 =====
 export interface ChoiceOption {
@@ -131,7 +132,7 @@ export function detectChoice(
     };
   }
 
-  const lastLog = gameState.log?.[gameState.log.length - 1]?.message || '';
+  const lastLog = logEntryPlainText(gameState.log?.[gameState.log.length - 1], me.id);
   if (lastLog.includes('附魔台触发') && isMyTurn) {
     const cards = enchantCards(me);
     if (cards.length > 0) {

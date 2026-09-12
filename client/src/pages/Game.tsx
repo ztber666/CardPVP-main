@@ -23,6 +23,7 @@ import RulesModal from '../components/RulesModal';
 import { BUFF_ICON_MAP } from '../components/BuffCollection';
 import { useSettingsStore } from '../store/settingsStore';
 import ChoiceDialog from '../components/ChoiceDialog';
+import { logEntryPlainText } from '../utils/logText';
 import { useChoiceModal } from '../hooks/useChoiceModal';
 import SettingsModal from '../components/SettingsModal';
 import { useT } from '../i18n/i18n';
@@ -87,7 +88,7 @@ export default function Game() {
     }
 
     // 附魔台：日志中有"附魔台触发"提示时
-    const lastLog = gameState?.log?.[gameState.log.length - 1]?.message || '';
+    const lastLog = logEntryPlainText(gameState?.log?.[gameState.log.length - 1], me?.id || '');
     if (lastLog.includes('附魔台触发') && isMyTurn && !shownEnchant.current) {
       const checkTypes = [CostType.Heal, CostType.Attack, CostType.Buff, CostType.Debuff];
       const played = me.playedCardTypesThisTurn || [];

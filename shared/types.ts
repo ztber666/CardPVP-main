@@ -1,3 +1,5 @@
+import { BuffChangePayload, DiscardPayload, DrawCardPayload, EndActionPayload, PlayCardPayload, TriggerBuffPayload } from "./logEngine";
+
 // ===== 卡牌消耗类型 =====
 export enum CostType {
   Action = 'action',       // icon1 行动卡
@@ -146,7 +148,7 @@ export enum GamePhase {
 
 // ===== 富内容段（用于打出效果提示和结构化日志） =====
 export interface ContentSegment {
-  type: 'text' | 'card' | 'buff' | 'hpChange';
+  type: 'text' | 'card' | 'buff' | 'hpChange' | 'player'
   text?: string;
   bold?: boolean;           // for 'text' — 是否粗体
   cardId?: string;         // for 'card' — 渲染卡牌图片
@@ -154,6 +156,7 @@ export interface ContentSegment {
   playerName?: string;    // for 'hpChange' — 血量变化的玩家名
   hpDelta?: number;       // for 'hpChange' — 正=回血(绿)，负=伤害(红)
   isHeal?: boolean;       // for 'hpChange' — true=绿色(回血)，false=红色(伤害)
+  playerId?: string;      // for 'player' — 渲染人称
 }
 
 // ===== 打出效果提示条目（每条独立计时） =====
@@ -166,10 +169,19 @@ export interface TriggerEntry {
 // ===== 日志条目 =====
 export interface GameLogEntry {
   playerId: string;                          // 触发事件的玩家ID
-  message: string;                          // 纯文本回退
-  segments?: ContentSegment[][];            // 结构化内容：每行是一个 ContentSegment[]
-  type?: 'endTurn' | 'warning' | 'error' | 'drawCard';
+  content: ContentSegment[][];               // 日志内容 
+  type?: GameLogType;
+  payload?: DrawCardPayload | DiscardPayload | TriggerBuffPayload | BuffChangePayload | EndActionPayload | PlayCardPayload;
   timestamp: number;
+}
+
+export enum GameLogType {
+  PlayCard,
+  DrawCard,
+  Discard,
+  TriggerBuff,
+  BuffChange,
+  EndAction
 }
 
 // ===== 游戏全局状态 =====

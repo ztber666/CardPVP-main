@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { GameLogEntry, ContentSegment } from '@shared/types';
 import SegmentDetailImage from './SegmentDetailImage';
 import { useT } from '../i18n/i18n';
+import { playerLabel } from '../utils/logText';
 
 interface Props {
   log: GameLogEntry[];
@@ -10,23 +11,12 @@ interface Props {
 }
 
 /** 渲染单个内容段 */
-function SegmentRenderer({ segment, isOpponent }: { segment: ContentSegment; myPlayerId: string; isOpponent?: boolean }) {
+function SegmentRenderer({ segment, myPlayerId, isOpponent }: { segment: ContentSegment; myPlayerId: string; isOpponent?: boolean }) {
   switch (segment.type) {
     case 'text': {
-      // 敌方行动时，将文本开头的“对对方”替换为“对你”
-      let displayText = segment.text;
-      if (isOpponent && displayText?.startsWith('对对方')) {
-        displayText = '对你' + displayText.substring(3);
-      }
-      if (isOpponent && displayText?.startsWith('对方')) {
-        displayText = '你' + displayText.substring(2);
-      }
-      if (isOpponent && displayText?.startsWith('自己')) {
-        displayText = '对方' + displayText.substring(2);
-      }
       return (
         <span className={`text-[13px] leading-relaxed ${segment.bold ? 'font-semibold text-text-primary' : 'text-text-secondary/90'}`}>
-          {displayText}
+          {segment.text}
         </span>
       );
     }
@@ -34,6 +24,15 @@ function SegmentRenderer({ segment, isOpponent }: { segment: ContentSegment; myP
     case 'buff':
       // 可点击小图：点击弹出卡牌图鉴 / buff 介绍
       return <SegmentDetailImage segment={segment} />;
+    case 'player': {
+      // 人称段：与我方 id 相同 → 你，否则 → 对方
+      const isSelf = !!segment.playerId && segment.playerId === myPlayerId;
+      return (
+        <span className={`text-[13px] font-semibold ${isSelf ? 'text-sky-400' : 'text-rose-400'}`}>
+          {playerLabel(segment.playerId, myPlayerId)}
+        </span>
+      );
+    }
     case 'hpChange': {
       const delta = segment.hpDelta || 0;
       // 修复原有逻辑：若 isHeal 为 undefined，则根据 delta 判断
@@ -114,10 +113,10 @@ export default function GameLogPanel({ log, onClose, myPlayerId }: Props) {
           )}
 
           {log.map((entry, idx) => {
-            // 判断是否为回合结束/回合开始的强调消息
-            const isEndTurn = entry.type === 'endTurn' && entry.message.includes('行动结束');
-            const isTurnStart = entry.type === 'endTurn' && entry.message.includes('回合开始');
-            const isHighlight = isEndTurn || isTurnStart;
+            // 结构化内容：entry.content 是「每行一个 ContentSegment[]」
+            const lines = entry.content ?? [];
+            // 没有内容的条目（例如尚未补充文案的回合结束条目）不渲染空卡片
+            if (lines.length === 0) return null;
 
             // 判断是否为当前玩家的行动
             const isMyAction = entry.playerId === myPlayerId;
@@ -126,10 +125,7 @@ export default function GameLogPanel({ log, onClose, myPlayerId }: Props) {
             // 根据类型分配高级感样式
             let cardClasses = "border rounded-xl p-3.5 transition-all duration-300 ";
             
-            if (isHighlight) {
-              // 高亮系统消息
-              cardClasses += "border-accent-primary/20 bg-accent-primary/[0.06] shadow-sm shadow-accent-primary/10";
-            } else if (isMyAction) {
+            if (isMyAction) {
               // 我方行动：蓝色框体系
               cardClasses += "border-sky-500/20 bg-sky-500/[0.04] border-l-[3px] border-l-sky-400/70";
             } else if (isOpponentAction) {
@@ -142,26 +138,12 @@ export default function GameLogPanel({ log, onClose, myPlayerId }: Props) {
 
             return (
               <div key={idx} className={cardClasses}>
-                {/* 强调消息直接显示文字 */}
-                {isHighlight ? (
-                  <p className="text-sm font-bold text-accent-primary text-center tracking-wide">
-                    {entry.message}
-                  </p>
-                ) : (
-                  <>
-                    {/* 结构化内容（每行一组 segments ）*/}
-                    {entry.segments ? (
-                      <div className="space-y-1">
-                        {entry.segments.map((segs, lineIdx) => (
-                          <LineRenderer key={lineIdx} segments={segs} myPlayerId={myPlayerId} isOpponent={!!isOpponentAction} />
-                        ))}
-                      </div>
-                    ) : (
-                      /* 纯文本回退（旧格式日志） */
-                      <p className="text-[13px] text-text-secondary leading-relaxed">{entry.message}</p>
-                    )}
-                  </>
-                )}
+                {/* 结构化内容（每行一组 segments ）*/}
+                <div className="space-y-1">
+                  {lines.map((segs, lineIdx) => (
+                    <LineRenderer key={lineIdx} segments={segs} myPlayerId={myPlayerId} isOpponent={!!isOpponentAction} />
+                  ))}
+                </div>
               </div>
             );
           })}

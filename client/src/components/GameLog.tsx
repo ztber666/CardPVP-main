@@ -1,11 +1,14 @@
 import { useEffect, useRef } from 'react';
 import { GameLogEntry } from '@shared/types';
+import { logEntryPlainText } from '../utils/logText';
 
 interface Props {
   log: GameLogEntry[];
+  /** 我方玩家 id，用于把 player 段解析成「你 / 对方」 */
+  myPlayerId?: string;
 }
 
-export default function GameLog({ log }: Props) {
+export default function GameLog({ log, myPlayerId }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -33,20 +36,10 @@ export default function GameLog({ log }: Props) {
           <p className="text-text-secondary/40 text-sm">暂无事件记录</p>
         </div>
       ) : (
-        log.map((entry, i) => 
-          entry.type === 'endTurn' ? (
-            // --- 高区分度设计：居中分割线 ---
-            <div key={i} className="relative flex items-center justify-center py-2 animate-fade-in">
-              <div className="absolute inset-0 flex items-center px-2" aria-hidden="true">
-                <div className="w-full border-t border-white/10"></div>
-              </div>
-              <div className="relative z-10 flex items-center gap-2 bg-card-bg px-3 text-[10px] font-medium uppercase tracking-widest text-text-secondary/40">
-                <span className="w-1 h-1 rounded-full bg-current opacity-60"></span>
-                <span>{entry.message}</span>
-                <span className="w-1 h-1 rounded-full bg-current opacity-60"></span>
-              </div>
-            </div>
-          ) : (
+        log.map((entry, i) => {
+          const text = logEntryPlainText(entry, myPlayerId);
+          if (!text) return null; // 无内容的条目（尚未补充文案）不占位
+          return (
             // --- 普通日志条目 ---
             <div 
               key={i} 
@@ -58,11 +51,11 @@ export default function GameLog({ log }: Props) {
                 </span>
               </div>
               <p className="text-sm text-text-primary/80 leading-relaxed pt-0.5 group-hover:text-text-primary transition-colors duration-150">
-                {entry.message}
+                {text}
               </p>
             </div>
-          )
-        )
+          );
+        })
       )}
     </div>
   );

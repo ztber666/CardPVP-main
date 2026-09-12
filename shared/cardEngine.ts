@@ -2,10 +2,11 @@ import {
   GameState, PlayerState, CardDef, CostType, BuffType,
   GamePhase, GameLogEntry, 
   BUFF_NAMES, ContentSegment,
+  GameLogType,
 } from './types';
 import { deepClone, applyEffectToPlayer, getBuffStacks, findBuff } from './buffEngine';
 import { DEFAULT_HAND_LIMIT, generateCardInstanceId, getCardSubtype, getLastNonGlassCard, MAX_LOG_ENTRIES } from './constants';
-import { discardFromHand, findOpponent, triggerDiscardEvents, triggerDrawEvents } from './gameEngine';
+import { appendLog, createLog, discardFromHand, findOpponent, triggerDiscardEvents, triggerDrawEvents, trimLog } from './gameEngine';
 
 // 服务端通知 handler（由 server/index.ts 设置，通过 globalThis 跨模块共享）
 // target: 'all'=双方都显示 'self'=仅出牌者 'opponent'=仅对手
@@ -111,12 +112,9 @@ export function drawCards(player: PlayerState, count: number, s: GameState, targ
     };
 
     addCardToHand(player, drawn, s, target);
-
-    // 触发摸牌事件（陷阱箱等）
-    triggerDrawEvents(player, drawn, s);
-
     // 注意：这里没有执行 deck.splice 或 shift，原牌堆不变
   }
+  triggerDrawEvents(player, count, s);
   return player;
 }
 
@@ -408,6 +406,7 @@ export function applyCard(
 
   const isSelfTarget = playerIndex === targetIndex;
   const cardName = card.name;
+  createLog(state, playerId, GameLogType.PlayCard, { type: 'playCard', cardId: card.id, playerId: playerId, targetId: targetId });
 
   // ===== 用一份统一的状态 p 代表卡牌使用者 =====
   // 出牌链路只允许本函数开头这一次 deepClone：p / t 直接引用 state 内的玩家对象，
@@ -502,7 +501,7 @@ export function applyCard(
       // 装备替换规则第 3 条：旧卡产生的 buff 被移除
       removeEquipmentBuffs(target, oldCard);
       // 装备替换规则第 4 条：旧卡被丢弃时触发的事件也会触发
-      triggerDiscardEvents(target, oldCard, state, undefined, []);
+      triggerDiscardEvents(target, oldCard, state, undefined);
     }
     const modifiedCard = { ...card, sourcePlayerId: p.id }; // 记录装备来源玩家ID，供buff计算时参考
     target.equipment[slotKey] = modifiedCard;
@@ -959,10 +958,10 @@ export function applyCard(
   // 组装 buff 变化行（同一玩家的所有 buff 合并到一行）
   // 奶桶已单独详细记录时长变化（含消失），目标一侧的通用"失去"行跳过避免重复
   const buffChangeLines: ContentSegment[][] = [];
-  if (lostBuffsP.length > 0 && !(reduceDurationDetailed && isSelfTarget)) buffChangeLines.push([{ type: 'text', text: '自己失去' }, ...lostBuffsP]);
-  if (lostBuffsT.length > 0 && !(reduceDurationDetailed && !isSelfTarget)) buffChangeLines.push([{ type: 'text', text: '对方失去' }, ...lostBuffsT]);
-  if (gainedBuffsP.length > 0) buffChangeLines.push([{ type: 'text', text: '自己获得' }, ...gainedBuffsP]);
-  if (gainedBuffsT.length > 0) buffChangeLines.push([{ type: 'text', text: '对方获得' }, ...gainedBuffsT]);
+  if (lostBuffsP.length > 0 && !(reduceDurationDetailed && isSelfTarget)) buffChangeLines.push([{ type: 'player', playerId: p.id }, { type: 'text', text: '失去' }, ...lostBuffsP]);
+  if (lostBuffsT.length > 0 && !(reduceDurationDetailed && !isSelfTarget)) buffChangeLines.push([{ type: 'player', playerId: t.id }, { type: 'text', text: '失去' }, ...lostBuffsT]);
+  if (gainedBuffsP.length > 0) buffChangeLines.push([{ type: 'player', playerId: p.id }, { type: 'text', text: '获得' }, ...gainedBuffsP]);
+  if (gainedBuffsT.length > 0) buffChangeLines.push([{ type: 'player', playerId: t.id }, { type: 'text', text: '获得' }, ...gainedBuffsT]);
 
   // 打出效果提示中也加入 buff 变化（需求 5）
   for (const line of buffChangeLines) {
@@ -974,26 +973,15 @@ export function applyCard(
 
   // 组装结构化日志内容
   const logSegments: ContentSegment[][] = [
-    [{ type: 'text', text: `对${targetLabel}打出了`, bold: true }, { type: 'card', cardId: card.id }],
     ...triggerLines,
   ];
   // 血量变化
   if (newHpP !== oldHpP) logSegments.push([{ type: 'text', text: `自己${oldHpP}→${newHpP}` }]);
   if (!isSelfTarget && newHpT !== oldHpT) logSegments.push([{ type: 'text', text: `对方${oldHpT}→${newHpT}` }]);
   // buff 变化
-  //logSegments.push(...buffChangeLines);
-
-  const entry: GameLogEntry = {
-    playerId: state.players[state.currentTurnIndex].id,
-    message: (msgs[msgs.length - 1] || `对${targetLabel}打出了${cardName}`) + hpSuffix,
-    segments: logSegments,
-    timestamp: Date.now(),
-  };
-  state.log.push(entry);
-
-  // 日志上限：防止长对局内存与前端渲染无限膨胀（配合 P0-2 的无限增长数组清理）
-  if (state.log.length > MAX_LOG_ENTRIES) {
-    state.log.splice(0, state.log.length - MAX_LOG_ENTRIES);
+  //logSegments.push(...buffChangeLines); comment out: buff 变化已在 showTrigger 中显示，不再重复写入日志
+  for (const line of logSegments) {
+    appendLog(state, line);
   }
 
   cardRecursionDepth--;
