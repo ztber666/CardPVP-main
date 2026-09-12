@@ -484,6 +484,27 @@ export function getRoomByPlayerId(playerId: string): { room: Room; player: RoomP
     return undefined;
 }
 
+/**
+ * 按 socketId 找到它当前实际绑定的房间/玩家。
+ *
+ * 与 getRoomBySocketId 的区别：socketToRoom 里可能残留"已被顶替的旧连接"的映射
+ * （玩家换新连接重连后，旧 socket 的 disconnect 事件可能很久之后才到达），
+ * 因此还需要确认 room.players 里的 socketId 字段仍然等于这个 socketId，
+ * 才能认定它是一条**当前有效**的连接。
+ */
+export function getPlayerBySocketId(socketId: string): { room: Room; player: RoomPlayer } | undefined {
+    const roomInfo = socketToRoom.get(socketId);
+    if (!roomInfo) return undefined;
+
+    const room = rooms.get(roomInfo.roomId);
+    if (!room) return undefined;
+
+    const player = room.players.find(p => p.id === roomInfo.playerId);
+    if (!player || player.socketId !== socketId) return undefined;
+
+    return { room, player };
+}
+
 // 更新玩家的 socketId，并重新绑定 socketToRoom 映射
 export function updatePlayerSocket(playerId: string, newSocketId: string): boolean {
     const data = getRoomByPlayerId(playerId);

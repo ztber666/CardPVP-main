@@ -35,7 +35,7 @@ interface GameStore {
   setConnected: (connected: boolean) => void;
   setOpponentDisconnected: (status: boolean) => void;
   setPlayer: (player: PlayerInfo) => void;
-  setGameState: (state: GameState | null) => void;
+  setGameState: (state: GameState | null, online?: Record<string, boolean>) => void;
   setWaitingForOpponent: (waiting: boolean) => void;
   setRematchState: (state: RematchState, requesterName?: string | null) => void;
   setPage: (page: Page) => void;
@@ -63,12 +63,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({ player, isMyTurn });
   },
 
-  setGameState: (gameState) => {
+  setGameState: (gameState, online) => {
     const state = get();
     const isMyTurn = gameState
       ? gameState.players[gameState.currentTurnIndex]?.id === state.player?.id
       : false;
-    set({ gameState, isMyTurn });
+    // 服务端下发的在线状态是权威的：每次都按它校正"对手是否断线"，
+    // 避免 opponent_left / player_joined 两个事件乱序到达时遮罩卡住或误报。
+    const patch: Partial<GameStore> = { gameState, isMyTurn };
+    if (gameState && online && state.player) {
+      const opponent = gameState.players.find(p => p.id !== state.player!.id);
+      if (opponent && online[opponent.id] !== undefined) {
+        patch.opponentDisconnected = !online[opponent.id];
+      }
+    }
+    set(patch);
   },
 
   setWaitingForOpponent: (waiting) => set({ waitingForOpponent: waiting }),

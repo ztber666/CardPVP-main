@@ -19,6 +19,17 @@ function getSocket(): Socket {
   return globalSocket;
 }
 
+/** 判断 player_joined 里的 playerId 是不是自己（优先用 store，兜底读本地存档） */
+function isSelfJoin(playerId: string): boolean {
+  const me = useGameStore.getState().player;
+  if (me?.id) return me.id === playerId;
+  try {
+    const saved = localStorage.getItem('gamePlayer');
+    if (saved) return JSON.parse(saved).id === playerId;
+  } catch { /* 忽略解析失败 */ }
+  return false;
+}
+
 export interface RoomInfo {
   id: string;
   playerCount: number;
@@ -306,6 +317,9 @@ export function useSocket() {
     socket.on('connect', () => {
       console.log('[Socket] 已连接');
       setConnected(true);
+      // 自己能重新连上服务端，说明本机连接已恢复；
+      // 双方同时"看到对方断线"时，遮罩不应把自己困住（真正的对手在线状态以 player_joined 为准）
+      useGameStore.getState().setOpponentDisconnected(false);
 
       // 注：即使是 socket.io 原生会话恢复（socket.recovered），也仍走 rejoin。
       // rejoin 幂等：服务端恢复分支会重挂业务映射并同步状态；同时 rejoin 兜底覆盖
@@ -348,34 +362,40 @@ export function useSocket() {
       // 【新增】如果人齐了（2人），说明对手在线，清除断线标记
       if (data.playerCount === 2) {
         useGameStore.getState().setOpponentDisconnected(false);
-        // 加入/重连者不是自己 → 说明是对手进入房间，提示"对手已连接"
-        const me = useGameStore.getState().player;
-        if (data.playerId && me && data.playerId !== me.id) {
+        if (data.playerId && isSelfJoin(data.playerId)) {
+          // 自己（重）连接成功：直接清除遮罩，不提示"对手已连接"
+          displayMessage('已重新连接');
+        } else {
+          // 加入/重连者不是自己 → 说明是对手进入房间，提示"对手已连接"
           displayMessage('对手已连接');
         }
       }
     });
 
-    socket.on('game_started', (state: GameState) => {
+    socket.on('game_started', (state: GameState, online?: Record<string, boolean>) => {
       console.log('[Socket] 游戏开始', state);
-      setGameState(state);
+      setGameState(state, online);
       setWaitingForOpponent(false);
     });
 
-    socket.on('state_update', (state: GameState) => {
+    socket.on('state_update', (state: GameState, online?: Record<string, boolean>) => {
       console.log('[Socket] 状态更新', state);
-      setGameState(state);
+      setGameState(state, online);
     });
 
-    socket.on('game_over', (data: { winnerId: string; state: GameState }) => {
+    socket.on('game_over', (data: { winnerId: string; state: GameState; online?: Record<string, boolean> }) => {
       console.log('[Socket] 游戏结束', data);
-      setGameState(data.state);
+      setGameState(data.state, data.online);
     });
 
-    socket.on('opponent_left', () => {
+    socket.on('opponent_left', (data?: { playerId?: string }) => {
       console.log('[Socket] 对手已断开连接');
+      // 只认对手的断线通知：自己的连接状态由本机的 connect/disconnect 反映
+      const me = useGameStore.getState().player;
+      if (data?.playerId && me && data.playerId === me.id) return;
       displayMessage('对手已断开连接');
-      // 【新增】设置断线标记
+      // 注意：这里只做即时提示；最终是否显示"等待重连"遮罩以服务端在
+      // state_update 里下发的在线状态为准（防止迟到的 opponent_left 把遮罩重新点亮）
       useGameStore.getState().setOpponentDisconnected(true);
     });
 
@@ -392,10 +412,10 @@ export function useSocket() {
       useGameStore.getState().setRematchState('invited', data.requesterName);
     });
 
-    socket.on('rematch_start', (state: GameState) => {
+    socket.on('rematch_start', (state: GameState, online?: Record<string, boolean>) => {
       console.log('[Socket] 再战开始', state);
       useGameStore.getState().setRematchState(null);
-      useGameStore.getState().setGameState(state);
+      useGameStore.getState().setGameState(state, online);
     });
 
     socket.on('rematch_declined', () => {
