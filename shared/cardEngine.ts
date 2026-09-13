@@ -659,7 +659,6 @@ export function applyCard(
           sourcePlayerId: p.id,
           sourceCardId: card.id,
         };
-        if (isSelfTarget) p = target; else t = target;
         msgs.push(`${cardName}等待${targetLabel}选择丢弃`);
         showTrigger([
           { type: 'text', text: `等待${targetLabel}选择` },
