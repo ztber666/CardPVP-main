@@ -272,6 +272,9 @@
       })();
     </script>
 
+    <!-- 老内核兼容：Chromium<84 不支持 flex 布局的 gap，用它把间距补回来（现代内核自动跳过） -->
+    <script src="/flexgap-shim.js"></script>
+
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

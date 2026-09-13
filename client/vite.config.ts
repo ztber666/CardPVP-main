@@ -61,6 +61,12 @@ function serveRootFiles(): PluginOption {
 export default defineConfig({
   cacheDir: 'node_modules/.vite-dev',
   plugins: [react(), serveRootFiles()],
+  build: {
+    // 降低构建目标：这个游戏常用于局域网/离线老机器（Win7、老旧国产双核浏览器等），
+    // 默认的 'modules'(chrome87) 偏高。chrome80 覆盖 2020 年以后的 Chromium 内核，
+    // 对应 360安全浏览器 12/13+ 的极速模式；再老的浏览器请看 /check.html 自检页。
+    target: 'chrome80',
+  },
   resolve: {
     alias: {
       '@shared': path.resolve(__dirname, '../shared'),

@@ -1,3 +1,7 @@
 node_modules
 .claude
-client/dist
+client/dist/
+CardPVP-Offline/
+CardPVP-Offline-*.zip
+build-tmp/
+runtime-cache/

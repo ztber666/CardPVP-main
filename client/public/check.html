@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CardPVP 浏览器自检</title>
+<style>
+  body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background:#c3b091; color:#3d3229; margin:0; padding:20px; }
+  .wrap { max-width: 760px; margin: 0 auto; background:#fffdf8; border:1px solid rgba(61,50,41,.15); border-radius:16px; padding:20px 24px; box-shadow:0 8px 32px rgba(61,50,41,.08); }
+  h1 { font-size: 20px; margin:0 0 4px; }
+  .sub { color:#7a6b5c; font-size:13px; margin-bottom:16px; }
+  #verdict { padding:14px 16px; border-radius:12px; font-size:16px; font-weight:700; margin:12px 0; border:1px solid; }
+  .ok   { background:#e8f6ec; border-color:#9ed3ae; color:#1d6b36; }
+  .warn { background:#fdf4e3; border-color:#e6cf9a; color:#8a6100; }
+  .bad  { background:#fdeaea; border-color:#e6a3a3; color:#9b1c1c; }
+  table { border-collapse: collapse; width:100%; font-size:13px; margin-top:8px; }
+  td { border-bottom:1px solid #eee5d8; padding:6px 8px; vertical-align:top; }
+  td.k { width:190px; color:#5b4b3c; }
+  .y { color:#1d6b36; font-weight:700; }
+  .n { color:#9b1c1c; font-weight:700; }
+  .m { color:#8a6100; font-weight:700; }
+  textarea { width:100%; height:150px; font-family: Consolas, monospace; font-size:12px; margin-top:12px; border:1px solid #ddd2c0; border-radius:8px; padding:8px; }
+  .tip { font-size:13px; color:#5b4b3c; line-height:1.7; margin-top:10px; }
+  a.btn { display:inline-block; margin-top:14px; padding:10px 18px; background:#3d3229; color:#fff; text-decoration:none; border-radius:10px; font-size:14px; }
+  code { background:#f3ece1; padding:1px 5px; border-radius:4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>CardPVP 浏览器自检</h1>
+  <div class="sub">在准备用来玩游戏的浏览器里打开本页（<code>http://服务器IP:3001/check.html</code>），它会告诉你这个浏览器能不能跑这个游戏。</div>
+  <div id="verdict" class="">检测中……</div>
+  <table id="rows"></table>
+  <div class="tip" id="advice"></div>
+  <a class="btn" href="/">进入游戏 →</a>
+  <div class="tip">把下面的内容整段复制发给我，可以精确定位问题：</div>
+  <textarea id="report" readonly></textarea>
+</div>
+<script src="/flexgap-shim.js"></script>
+<script>
+(function () {
+  var rows = document.getElementById('rows');
+  var out = [];
+  function add(k, v, level) {
+    var tr = document.createElement('tr');
+    var td1 = document.createElement('td'); td1.className = 'k'; td1.appendChild(document.createTextNode(k));
+    var td2 = document.createElement('td');
+    var span = document.createElement('span');
+    span.className = (level === 'y' ? 'y' : (level === 'n' ? 'n' : 'm'));
+    span.appendChild(document.createTextNode(v));
+    td2.appendChild(span);
+    tr.appendChild(td1); tr.appendChild(td2); rows.appendChild(tr);
+    out.push(k + ': ' + v);
+  }
+  // 语法检测：把代码片段放在字符串里，用 new Function 解析
+  function canParse(src) {
+    try { new Function(src); return true; } catch (e) { return false; }
+  }
+  function has(fn) { try { return fn(); } catch (e) { return false; } }
+
+  var ua = navigator.userAgent;
+  var isIE = has(function () { return !!document.documentMode; }) || /MSIE |Trident\//.test(ua);
+  var dm = document.documentMode || 0;
+  var chromeMatch = ua.match(/Chrome\/(\d+)/) || ua.match(/Chromium\/(\d+)/);
+  var chromeVer = chromeMatch ? parseInt(chromeMatch[1], 10) : 0;
+  var isEdge = /Edg\//.test(ua);
+  var isFirefox = /Firefox\/(\d+)/.test(ua);
+  var isSafari = /Safari\//.test(ua) && !chromeMatch;
+  function browserName() {
+    if (/MetaSr|SE 2\.X/i.test(ua)) return '搜狗高速浏览器（极速模式）';
+    if (/QQBrowser/i.test(ua)) return 'QQ浏览器';
+    if (/2345Explorer/i.test(ua)) return '2345 加速浏览器';
+    if (/LBBROWSER/i.test(ua)) return '猎豹浏览器';
+    if (/UBrowser|UCBrowser/i.test(ua)) return 'UC 浏览器';
+    if (/360SE|360EE|QIHU/i.test(ua)) return '360 安全/极速浏览器';
+    if (isEdge) return 'Microsoft Edge';
+    if (/Firefox\//i.test(ua)) return 'Firefox';
+    if (/Chrome\//i.test(ua)) return 'Chrome';
+    return '未知';
+  }
+  var brName = browserName();
+
+  add('识别为浏览器', brName, 'm');
+  add('IE 兼容模式 / IE 内核', isIE ? ('是（documentMode=' + dm + '）') : '否', isIE ? 'n' : 'y');
+  add('Chromium 内核版本', chromeVer ? ('Chromium ' + chromeVer) : (isFirefox ? 'Firefox' : (isSafari ? 'Safari' : '未知')), chromeVer ? 'y' : 'm');
+
+  // 游戏打包产物"真正用到"的语法（构建目标 chrome80，已确认产物里不含 ??= / ||= / &&= / static 块）
+  var synRequired = [
+    ['可选链 a?.b', 'return ({}?.a);'],
+    ['空值合并 a ?? b', 'return (1 ?? 2);'],
+    ['class 字段', 'class A { x = 1; } return new A().x;'],
+    ['async/await', 'async function f(){ await 0; } return f;'],
+    ['展开运算符 {...a}', 'var o = {a:1}; return {...o};'],
+    ['箭头函数 () => {}', 'return (() => 1)();']
+  ];
+  // 仅供参考：游戏并不使用这些新语法，缺了也不影响
+  var synOptional = [
+    ['逻辑赋值 a ??= b', 'var a = null; a ??= 1; return a;'],
+    ['私有字段 #a', 'class A { #x = 1; get x(){ return this.#x; } } return new A().x;'],
+    ['class 静态块 static {}', 'class A { static x; static { A.x = 1; } } return A.x;']
+  ];
+  function collect(list) {
+    var fail = [];
+    for (var i = 0; i < list.length; i++) { if (!canParse(list[i][1])) fail.push(list[i][0]); }
+    return fail;
+  }
+  var synFail = collect(synRequired);
+  var synOptFail = collect(synOptional);
+  add('ES 语法（游戏需要）', synFail.length === 0 ? '全部支持' : ('缺少：' + synFail.join('、')), synFail.length === 0 ? 'y' : 'n');
+  add('ES 语法（游戏不需要）', synOptFail.length === 0 ? '全部支持' : ('缺少（不影响游戏）：' + synOptFail.join('、')), synOptFail.length === 0 ? 'y' : 'm');
+
+  // 运行时 API
+  var apis = [];
+  function api(name, ok, must) { apis.push({ n: name, ok: ok, must: must }); }
+  api('Promise', typeof Promise === 'function', true);
+  api('JSON', typeof JSON === 'object', true);
+  api('XMLHttpRequest', typeof XMLHttpRequest === 'function', true);
+  api('WebSocket', typeof WebSocket === 'function', false);
+  api('fetch', typeof fetch === 'function', false);
+  api('Element.animate（动画）', !!(window.Element && Element.prototype && Element.prototype.animate), false);
+  api('ResizeObserver', typeof ResizeObserver === 'function', false);
+  api('IntersectionObserver', typeof IntersectionObserver === 'function', false);
+  api('Array.prototype.at', !!(Array.prototype && Array.prototype.at), false);
+  api('Array.prototype.flatMap', !!(Array.prototype && Array.prototype.flatMap), false);
+  api('Object.fromEntries', typeof Object.fromEntries === 'function', false);
+  api('structuredClone', typeof structuredClone === 'function', false);
+  api('crypto.randomUUID', !!(window.crypto && crypto.randomUUID), false);
+  var mustFail = [], softFail = [];
+  for (var j = 0; j < apis.length; j++) {
+    var a = apis[j];
+    if (!a.ok) { if (a.must) mustFail.push(a.n); else softFail.push(a.n); }
+  }
+  add('必需 API', mustFail.length === 0 ? '齐全' : ('缺少：' + mustFail.join('、')), mustFail.length === 0 ? 'y' : 'n');
+  add('可选 API', softFail.length === 0 ? '齐全' : ('缺少（一般不影响）：' + softFail.join('、')), softFail.length === 0 ? 'y' : 'm');
+  // CSS 能力（缺了只是样式小瑕疵）
+  var cssSupports = (typeof CSS !== 'undefined' && CSS.supports) ? CSS.supports : null;
+  function css(prop, val) {
+    if (!cssSupports) return false;
+    try { return cssSupports(prop, val); } catch (e) { return false; }
+  }
+  var dvh = css('height', '100dvh');
+  var whereSel = false;
+  if (cssSupports) { try { whereSel = CSS.supports('selector(:where(a))'); } catch (e) { whereSel = false; } }
+  add('CSS 动态视口单位 100dvh', dvh ? '支持' : '不支持（已有 100vh 兜底，无影响）', dvh ? 'y' : 'm');
+  add('CSS :where()', whereSel ? '支持' : '不支持（仅影响一条下划线样式）', whereSel ? 'y' : 'm');
+  add('CSS backdrop-filter', css('backdrop-filter', 'blur(4px)') || css('-webkit-backdrop-filter', 'blur(4px)') ? '支持' : '不支持（毛玻璃效果降级）', 'm');
+
+  // flex 布局的 gap（Chromium 84 起支持）：不支持时游戏里的间距会消失，靠 flexgap-shim.js 补
+  var flexGapOk = (function () {
+    try {
+      var w = document.createElement('div');
+      w.style.cssText = 'display:flex;flex-direction:column;gap:10px;position:absolute;left:-9999px;top:-9999px;width:20px;';
+      var a = document.createElement('div'); a.style.cssText = 'height:0px;';
+      var b = document.createElement('div'); b.style.cssText = 'height:0px;';
+      w.appendChild(a); w.appendChild(b);
+      document.body.appendChild(w);
+      var h = w.getBoundingClientRect().height || 0;
+      document.body.removeChild(w);
+      return h >= 5;
+    } catch (e) { return true; }
+  })();
+  var shimOn = !!window.__cardpvpFlexGapShim;
+  add('flex 布局的 gap 间距', flexGapOk ? '内核原生支持' : (shimOn ? '内核不支持，已由兼容补丁自动补上' : '不支持，间距会挤在一起'),
+      (flexGapOk || shimOn) ? 'y' : 'n');
+
+  // 与服务端的连通性
+  var verdictEl = document.getElementById('verdict');
+  var adviceEl = document.getElementById('advice');
+  function finish(connText, connLevel) {
+    add('与服务器通信', connText, connLevel);
+    // 只要"游戏需要的"语法/接口齐全、不是 IE 内核、能连上服务器，就能玩。
+    // 低版本内核只影响样式细节（见下面的提醒），不影响功能。
+    // 判定口径：只有"玩不了"才算 ❌；老内核缺 flex gap 属于"能玩但难看" → ⚠️
+    // （本便携包已内置 flexgap-shim.js 自动补间距，所以正常情况下这里是 ✅）
+    var bad = isIE || synFail.length > 0 || mustFail.length > 0 || connLevel === 'n';
+    var warn = !flexGapOk && !shimOn;
+    var cls, title;
+    if (bad) { cls = 'bad'; title = '❌ 这个浏览器跑不了游戏'; }
+    else if (warn) { cls = 'warn'; title = '⚠️ 可以玩，但外观可能有小差异'; }
+    else { cls = 'ok'; title = '✅ 可以运行，放心玩'; }
+    verdictEl.className = cls;
+    verdictEl.innerHTML = '';
+    verdictEl.appendChild(document.createTextNode(title));
+
+    var advice = '';
+    if (isIE) {
+      advice = '当前是 IE 兼容模式（360/QQ/搜狗等国产浏览器的"兼容模式"就是 IE 内核），React 页面无法运行。'
+        + '请在地址栏右侧点"闪电/极速"图标切换到<b>极速模式</b>，或在浏览器设置里把内核模式改成"全部使用极速模式"，然后刷新本页。';
+    } else if (synFail.length > 0 || mustFail.length > 0) {
+      advice = '这个浏览器内核太旧，缺少游戏需要的语法或接口。建议换用 Chrome 109 / Edge 109（最后支持 Win7 的版本），'
+        + '或者让这台机器只当服务器，用手机/平板浏览器打开游戏地址来玩。';
+    } else if (chromeVer > 0 && chromeVer < 88) {
+      advice = '<b>这个浏览器可以玩。</b>内核是 Chromium ' + chromeVer + '（' + brName + '），功能完全够用。'
+        + (shimOn ? '它不支持 flex 布局的 gap 间距，本包已自动启用兼容补丁把间距补回来（上方已确认生效），显示效果和现代浏览器基本一致。'
+                  : '注意：它不支持 flex 布局的 gap 间距，且兼容补丁未生效，按钮/卡片之间可能会挤在一起。')
+        + '另外它比较老（低于 88），个别表单控件样式会走浏览器默认样式，不影响出牌和对局。';
+    } else {
+      advice = '一切正常。直接点下面的"进入游戏"即可开一局。';
+    }
+    if (connLevel === 'n') {
+      advice += '<br><br><b>与服务器通信失败</b>：确认地址栏里访问的是服务器的 IP 和 3001 端口（不能是 file:// 打开的本地文件），'
+        + '并确认服务器窗口还开着、防火墙已放行。';
+    }
+    adviceEl.innerHTML = advice;
+    document.getElementById('report').value = out.join('\n');
+  }
+
+  if (location.protocol === 'file:') {
+    finish('未测试（当前是 file:// 打开的本地文件，请改用 http://服务器IP:3001/check.html）', 'm');
+    return;
+  }
+  try {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', '/api/rooms', true);
+    xhr.timeout = 5000;
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState === 4) {
+        if (xhr.status === 200) finish('正常（HTTP 200）', 'y');
+        else finish('异常（HTTP ' + xhr.status + '）', 'n');
+      }
+    };
+    xhr.ontimeout = function () { finish('超时', 'n'); };
+    xhr.onerror = function () { finish('失败', 'n'); };
+    xhr.send();
+  } catch (e) {
+    finish('失败：' + e.message, 'n');
+  }
+})();
+</script>
+</body>
+</html>
