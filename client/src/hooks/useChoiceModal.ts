@@ -64,6 +64,24 @@ export function detectChoice(
   const slotTag: Record<string, string> = { equip: l('装备', 'Equip'), weapon: l('武器', 'Weapon'), field: l('场地', 'Field') };
   const cardLabel = (card: CardDef) => cardNameForTemplate(lang, card.id, card.name);
 
+  // 刷怪笼：选择丢弃攻击卡或不丢（优先级最高：挂起中的未结算效果，可能跨回合存在）
+  if (me.pendingSpawnerChoice) {
+    const pending = me.pendingSpawnerChoice;
+    // 快照里的卡可能已因后续效果离开手牌（被偷/被弃），过滤出仍存在的
+    const candidates = (pending.cardIds || [])
+      .map(id => me.hand.find(c => c.id === id))
+      .filter((c): c is CardDef => !!c);
+    return {
+      id: 'spawner', triggerKey: `spawner:${pending.sourceCardId}`, icon: '🧟', cardId: 'card_10', title: '刷怪笼',
+      subtitle: '选择一张攻击卡丢弃，或选择不丢', accent: 'attack', kind: 'select',
+      dismissible: false,
+      options: [
+        ...candidates.map(c => ({ key: `discard:${c.id}`, label: c.name, img: getCardImageUrl(c.id) })),
+        { key: 'skip', label: '不丢（获得尸潮）'},
+      ],
+    };
+  }
+
   if (me.pendingGuessCardId) {
     return {
       id: 'guess', triggerKey: me.pendingGuessCardId, icon: '🔍', cardId: 'card_32', title: l('侦测器', 'Observer'),

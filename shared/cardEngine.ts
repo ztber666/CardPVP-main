@@ -645,21 +645,24 @@ export function applyCard(
         { type: 'text', text: `${targetLabel}上限+${effect.value}` },
       ], 'all');
     }else if (effect.buffType === BuffType.ConditionalDiscard) {
-    // 条件丢弃：检查目标手牌是否有<烟花>或<龙息>，有则随机丢弃一张，否则造成伤害
+    // 条件丢弃：检查目标手牌是否有攻击卡，有则挂起等待目标选择（交互弹窗），否则获得尸潮并造成伤害
     const target = isSelfTarget ? p : t;
     
     // 查找目标手牌中是否存在 '烟花' 或 '龙息' 或 '重生锚' 或 '刷怪笼'
-    const discardCandidateIdx = target.hand.findIndex(c => c.name === '烟花' || c.name === '龙息' || c.name === '重生锚' || c.name === '刷怪笼');
+    const discardCandidates = target.hand.filter(c => c.name === '烟花' || c.name === '龙息' || c.name === '重生锚' || c.name === '刷怪笼');
 
-    if (discardCandidateIdx !== -1) {
-        // 如果有，随机丢弃一张符合条件的牌（这里逻辑为：如果找到了索引，则丢弃该索引对应的牌）
-        // 原逻辑也是找到索引后直接丢弃，因为 findIndex 返回的是第一个匹配项，相当于在匹配的牌中随机选了一张
-        const [discarded] = target.hand.splice(discardCandidateIdx, 1);
-        discardFromHand(state, target.id, discarded.id);
+    if (discardCandidates.length > 0) {
+        // 交互式选择：挂起 pendingSpawnerChoice，由目标玩家通过 spawner_choice 提交选择，
+        // gameEngine.resolveSpawnerChoice 负责结算（丢弃走完整被动丢弃链路 / 不丢获尸潮+伤害）
+        target.pendingSpawnerChoice = {
+          cardIds: discardCandidates.map(c => c.id),
+          sourcePlayerId: p.id,
+          sourceCardId: card.id,
+        };
+        if (isSelfTarget) p = target; else t = target;
+        msgs.push(`${cardName}等待${targetLabel}选择丢弃`);
         showTrigger([
-          { type: 'player', playerId: target.id },
-          { type: 'text', text: `丢弃了` },
-          { type: 'card', cardId: discarded.id },
+          { type: 'text', text: `等待${targetLabel}选择` },
         ], 'all');
     } else {
         // 否则给予尸潮并造成伤害

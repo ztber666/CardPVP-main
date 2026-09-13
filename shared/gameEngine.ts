@@ -990,9 +990,68 @@ export function cancelEquipChoice(state: GameState, playerId: string): GameState
   ]);
 
   return s;
-} 
+}
 
-// ===== 酿造台：处理卡牌转化 ===== 
+// ===== 刷怪笼：处理目标选择（丢弃攻击卡 / 不丢获尸潮） =====
+export function resolveSpawnerChoice(state: GameState, playerId: string, choice: { action: 'discard' | 'skip'; cardId?: string }): GameState {
+  const s = deepClone(state);
+  const idx = s.players.findIndex(p => p.id === playerId);
+  if (idx === -1) return s;
+  const player = s.players[idx];
+  const pending = player.pendingSpawnerChoice;
+  if (!pending) return s;
+  // 刷怪笼打出者（自瞄时即目标自己）
+  const source = s.players.find(pl => pl.id === pending.sourcePlayerId) || s.players[1 - idx];
+
+  if (choice.action === 'discard') {
+    const cardId = choice.cardId;
+    // 非法/过期选择（卡已不在打出时快照或已不在手牌）→ 不结算，等待重新提交
+    if (!cardId || !pending.cardIds.includes(cardId)) return s;
+    const cardIdx = player.hand.findIndex(c => c.id === cardId);
+    if (cardIdx === -1) return s;
+    const [discarded] = player.hand.splice(cardIdx, 1);
+    player.discardPile.push(discarded);
+
+    // 被动丢弃走完整丢弃链路（仙人掌/烈焰棒/绑定诅咒/幽匿尖啸体 + 魔咒爆发判定），与原自动丢弃路径一致
+    triggerDiscardEvents(player, discarded, s, source);
+
+    s.players[idx] = player;
+    s.log.push({
+      playerId: pending.sourcePlayerId,
+      message: `刷怪笼使${player.name}丢弃了${discarded.name}`,
+      timestamp: Date.now(),
+    });
+    showTrigger([
+      { type: 'text', text: `${player.name}丢弃` },
+      { type: 'card', cardId: discarded.id },
+    ], 'all');
+  } else {
+    // 不丢：获得尸潮 + 受到4点物理伤害（与原版"无攻击卡"分支一致）
+    applyEffectToPlayer(player, BuffType.Horde, 4, 2, pending.sourceCardId, s, pending.sourcePlayerId);
+    damage(source, player, DamageType.Physical, 4, s);
+    s.players[idx] = player;
+    s.log.push({
+      playerId: pending.sourcePlayerId,
+      message: `${player.name}不丢弃攻击卡，获得2回合尸潮并受到4点伤害`,
+      timestamp: Date.now(),
+    });
+    showTrigger([
+      { type: 'text', text: `${player.name}获得` },
+      { type: 'buff', buffType: BuffType.Horde },
+      { type: 'text', text: '2回合' },
+    ], 'all');
+  }
+
+  // 结算完成，清除挂起标记
+  player.pendingSpawnerChoice = undefined;
+  s.players[idx] = player;
+  // 丢弃链路/伤害可能致死，补统一胜负判定
+  checkGameOver(s);
+  trimLog(s);
+  return s;
+}
+
+// ===== 酿造台：处理卡牌转化 =====
 export function handleBrewConversion(state: GameState, playerId: string, cardId: string): GameState { 
   const s = deepClone(state); 
   const idx = s.players.findIndex(p => p.id === playerId); 

@@ -3,7 +3,7 @@ import {
   createGame, initGame, startTurn, endTurn, playCard,
   discardFromHand, unequipCard, handleGuessWeight, handleDraftPick,
   handleBucketChoice, handleEquipChoice, cancelEquipChoice, handleBrewConversion,
-  handleRedstoneChoice,
+  handleRedstoneChoice, resolveSpawnerChoice,
   surrender,
 } from '../../shared/gameEngine';
 import { validatePlayCard, validateEndTurn } from '../../shared/validation';
@@ -356,6 +356,16 @@ export function handleCancelEquipChoiceAction(socketId: string): { success: bool
   const room = rooms.get(roomInfo.roomId);
   if (!room || !room.gameState) return { success: false, error: '房间或游戏状态不存在' };
   room.gameState = withNotifyRoom(roomInfo.roomId, roomInfo.playerId, () => cancelEquipChoice(room.gameState!, roomInfo.playerId));
+  return { success: true, gameState: room.gameState };
+}
+
+// ===== 刷怪笼 =====
+export function handleSpawnerChoiceAction(socketId: string, action: string, cardId?: string): { success: boolean; gameState?: GameState; error?: string } {
+  const roomInfo = getRoomBySocketId(socketId);
+  if (!roomInfo) return { success: false, error: '未找到房间' };
+  const room = rooms.get(roomInfo.roomId);
+  if (!room || !room.gameState) return { success: false, error: '房间或游戏状态不存在' };
+  room.gameState = withNotifyRoom(roomInfo.roomId, roomInfo.playerId, () => resolveSpawnerChoice(room.gameState!, roomInfo.playerId, { action: action as 'discard' | 'skip', cardId }));
   return { success: true, gameState: room.gameState };
 }
 
