@@ -1013,14 +1013,12 @@ export function resolveSpawnerChoice(state: GameState, playerId: string, choice:
     player.discardPile.push(discarded);
 
     // 被动丢弃走完整丢弃链路（仙人掌/烈焰棒/绑定诅咒/幽匿尖啸体 + 魔咒爆发判定），与原自动丢弃路径一致
-    triggerDiscardEvents(player, discarded, s, source);
+    triggerDiscardEvents(player, discarded, s);
 
     s.players[idx] = player;
-    s.log.push({
-      playerId: pending.sourcePlayerId,
-      message: `刷怪笼使${player.name}丢弃了${discarded.name}`,
-      timestamp: Date.now(),
-    });
+    appendLog(s, [
+      { type: 'text', text: `刷怪笼使${player.name}丢弃了${discarded.name}` }
+    ])
     showTrigger([
       { type: 'text', text: `${player.name}丢弃` },
       { type: 'card', cardId: discarded.id },
@@ -1030,11 +1028,9 @@ export function resolveSpawnerChoice(state: GameState, playerId: string, choice:
     applyEffectToPlayer(player, BuffType.Horde, 4, 2, pending.sourceCardId, s, pending.sourcePlayerId);
     damage(source, player, DamageType.Physical, 4, s);
     s.players[idx] = player;
-    s.log.push({
-      playerId: pending.sourcePlayerId,
-      message: `${player.name}不丢弃攻击卡，获得2回合尸潮并受到4点伤害`,
-      timestamp: Date.now(),
-    });
+    appendLog(s, [
+      {type: 'text', text: `${player.name}不丢弃攻击卡，获得2回合4层尸潮` }
+    ])
     showTrigger([
       { type: 'text', text: `${player.name}获得` },
       { type: 'buff', buffType: BuffType.Horde },
